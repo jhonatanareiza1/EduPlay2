@@ -22,6 +22,10 @@ import { syncOfflineOperationsHandler } from "./functions/sync/syncOfflineOperat
 import { generateAIContentHandler } from "./functions/ai/generateAIContent";
 import { validateAIContentHandler } from "./functions/ai/validateAIContent";
 
+import {
+    initializeGamificationProfileHandler,
+} from './functions/gamification/initializeGamificationProfile';
+
 setGlobalOptions({
     maxInstances: 10,
 });
@@ -82,6 +86,19 @@ export const awardXP = onCall(async (request) => {
 export const awardCoins = onCall(async (request) => {
     return awardCoinsHandler(request.data);
 });
+
+export const initializeGamificationProfile = onCall(
+    async (request) => {
+        return initializeGamificationProfileHandler(
+            request.data,
+            request.auth
+                ? {
+                    uid: request.auth.uid,
+                }
+                : null,
+        );
+    },
+);
 
 export const unlockAchievement = onCall(async (request) => {
     return unlockAchievementHandler(request.data);

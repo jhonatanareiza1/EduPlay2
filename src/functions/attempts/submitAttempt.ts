@@ -3,11 +3,14 @@ import { getFirestore } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
 
 process.env.FIRESTORE_EMULATOR_HOST ??= "127.0.0.1:8081";
-process.env.GCLOUD_PROJECT ??= "eduplay-test";
+
+
+const projectId =
+    process.env.GCLOUD_PROJECT ?? "eduplay-test";
 
 if (getApps().length === 0) {
     initializeApp({
-        projectId: "eduplay-test",
+        projectId,
     });
 }
 
