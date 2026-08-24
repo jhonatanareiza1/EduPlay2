@@ -3,12 +3,59 @@ import { HttpsError } from "firebase-functions/v2/https";
 export interface CalculateScoreData {
     activityId: string;
     answers: Record<string, unknown>;
+    answerKey: Record<string, string | string[]>;
+    pointsByQuestion?: Record<string, number>;
+    passingScore?: number;
 }
 
 export interface CalculateScoreResult {
     score: number;
+    totalPoints: number;
     correctAnswers: number;
-    totalAnswers: number;
+    totalQuestions: number;
+    passed: boolean;
+    answers: Array<{
+        questionId: string;
+        answer: string | string[];
+        isCorrect: boolean;
+        pointsEarned: number;
+        pointsAvailable: number;
+    }>;
+}
+
+function normalizeAnswer(
+    answer: string | string[],
+): string[] {
+    const values = Array.isArray(answer)
+        ? answer
+        : [answer];
+
+    return values
+        .map((value) => value.trim().toLowerCase())
+        .sort();
+}
+
+function answersMatch(
+    submitted: string | string[],
+    correct: string | string[],
+): boolean {
+    const submittedValues =
+        normalizeAnswer(submitted);
+
+    const correctValues =
+        normalizeAnswer(correct);
+
+    if (
+        submittedValues.length !==
+        correctValues.length
+    ) {
+        return false;
+    }
+
+    return submittedValues.every(
+        (value, index) =>
+            value === correctValues[index],
+    );
 }
 
 export function calculateScoreHandler(
@@ -36,33 +83,110 @@ export function calculateScoreHandler(
         );
     }
 
-    const answers = Object.values(data.answers);
+    if (
+        !data.answerKey ||
+        typeof data.answerKey !== "object" ||
+        Array.isArray(data.answerKey)
+    ) {
+        throw new HttpsError(
+            "invalid-argument",
+            "La clave de respuestas es inválida.",
+        );
+    }
 
-    if (answers.length === 0) {
+    const questionIds =
+        Object.keys(data.answerKey);
+
+    const totalQuestions =
+        questionIds.length;
+
+    if (totalQuestions === 0) {
         return {
             score: 0,
+            totalPoints: 0,
             correctAnswers: 0,
-            totalAnswers: 0,
+            totalQuestions: 0,
+            passed: false,
+            answers: [],
         };
     }
 
-    const correctAnswers = answers.filter(
-        (answer) =>
-            typeof answer === "object" &&
-            answer !== null &&
-            "isCorrect" in answer &&
-            answer.isCorrect === true,
-    ).length;
+    let totalPoints = 0;
+    let earnedPoints = 0;
+    let correctAnswers = 0;
 
-    const totalAnswers = answers.length;
+    const results =
+        questionIds.map((questionId) => {
+            const pointsAvailable =
+                data.pointsByQuestion?.[questionId]
+                ?? 1;
 
-    const score = Math.round(
-        (correctAnswers / totalAnswers) * 10,
-    );
+            totalPoints += pointsAvailable;
+
+            const submitted =
+                data.answers[questionId];
+
+            const correct =
+                data.answerKey[questionId];
+
+            const validSubmitted =
+                typeof submitted === "string"
+                || (
+                    Array.isArray(submitted)
+                    && submitted.every(
+                        (value) =>
+                            typeof value === "string",
+                    )
+                );
+
+            const isCorrect =
+                validSubmitted
+                && (
+                    answersMatch(
+                        submitted as string | string[],
+                        correct,
+                    )
+                );
+
+            const pointsEarned =
+                isCorrect
+                    ? pointsAvailable
+                    : 0;
+
+            if (isCorrect) {
+                correctAnswers += 1;
+                earnedPoints += pointsEarned;
+            }
+
+            return {
+                questionId,
+                answer: validSubmitted
+                    ? submitted as string | string[]
+                    : "",
+                isCorrect,
+                pointsEarned,
+                pointsAvailable,
+            };
+        });
+
+    const score =
+        totalPoints === 0
+            ? 0
+            : Math.round(
+                (earnedPoints / totalPoints) * 10,
+            );
+
+    const passingScore =
+        typeof data.passingScore === "number"
+            ? data.passingScore
+            : 6;
 
     return {
         score,
+        totalPoints,
         correctAnswers,
-        totalAnswers,
+        totalQuestions,
+        passed: score >= passingScore,
+        answers: results,
     };
 }

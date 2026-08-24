@@ -1,12 +1,30 @@
-import { getApps, initializeApp } from "firebase-admin/app";
-import { getFirestore } from "firebase-admin/firestore";
-import { HttpsError } from "firebase-functions/v2/https";
+import {
+    getApps,
+    initializeApp,
+} from "firebase-admin/app";
 
-process.env.FIRESTORE_EMULATOR_HOST ??= "127.0.0.1:8081";
+import {
+    getFirestore,
+} from "firebase-admin/firestore";
 
+import {
+    HttpsError,
+} from "firebase-functions/v2/https";
+
+import {
+    calculateScoreHandler,
+} from "./calculateScore";
+
+import {
+    getActivityForAttempt,
+} from "../activities/getActivity";
+
+process.env.FIRESTORE_EMULATOR_HOST ??=
+    "127.0.0.1:8081";
 
 const projectId =
-    process.env.GCLOUD_PROJECT ?? "eduplay-test";
+    process.env.GCLOUD_PROJECT
+    ?? "eduplay-test";
 
 if (getApps().length === 0) {
     initializeApp({
@@ -44,13 +62,13 @@ export async function submitAttemptHandler(
     } = data;
 
     if (
-        typeof activityId !== "string" ||
-        activityId.trim() === "" ||
-        typeof studentId !== "string" ||
-        studentId.trim() === "" ||
-        !answers ||
-        typeof answers !== "object" ||
-        Array.isArray(answers)
+        typeof activityId !== "string"
+        || activityId.trim() === ""
+        || typeof studentId !== "string"
+        || studentId.trim() === ""
+        || !answers
+        || typeof answers !== "object"
+        || Array.isArray(answers)
     ) {
         throw new HttpsError(
             "invalid-argument",
@@ -71,14 +89,8 @@ export async function submitAttemptHandler(
         .collection("students")
         .doc(studentId);
 
-    const activityRef = db
-        .collection("activities")
-        .doc(activityId);
-
-    const [studentSnap, activitySnap] = await Promise.all([
-        studentRef.get(),
-        activityRef.get(),
-    ]);
+    const studentSnap =
+        await studentRef.get();
 
     if (!studentSnap.exists) {
         throw new HttpsError(
@@ -87,12 +99,33 @@ export async function submitAttemptHandler(
         );
     }
 
-    if (!activitySnap.exists) {
-        throw new HttpsError(
-            "not-found",
-            "La actividad no existe.",
-        );
+    const {
+        activity,
+        config,
+        answerKey,
+    } = await getActivityForAttempt(
+        activityId,
+    );
+
+    const pointsByQuestion:
+        Record<string, number> = {};
+
+    for (const question of config.questions) {
+        pointsByQuestion[question.id] =
+            typeof question.points === "number"
+                ? question.points
+                : 1;
     }
+
+    const score =
+        calculateScoreHandler({
+            activityId,
+            answers,
+            answerKey: answerKey.answers,
+            pointsByQuestion,
+            passingScore:
+                config.passingScore,
+        });
 
     const attemptRef = db
         .collection("attempts")
@@ -101,8 +134,18 @@ export async function submitAttemptHandler(
     await attemptRef.create({
         studentId,
         activityId,
-        ...(groupId ? { groupId } : {}),
+        ...(groupId
+            ? { groupId }
+            : {}),
         answers,
+        score: score.score,
+        totalPoints: score.totalPoints,
+        correctAnswers:
+            score.correctAnswers,
+        totalQuestions:
+            score.totalQuestions,
+        passed: score.passed,
+        answerResults: score.answers,
         status: "submitted",
         createdAt: new Date(),
     });
@@ -110,5 +153,16 @@ export async function submitAttemptHandler(
     return {
         success: true,
         attemptId: attemptRef.id,
+        activity: {
+            id: activity.id,
+            title: activity.title,
+        },
+        score: score.score,
+        totalPoints: score.totalPoints,
+        correctAnswers:
+            score.correctAnswers,
+        totalQuestions:
+            score.totalQuestions,
+        passed: score.passed,
     };
 }

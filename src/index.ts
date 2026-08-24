@@ -5,7 +5,6 @@ import { createInvitationHandler } from "./functions/invitations/createInvitatio
 import { acceptInvitationHandler } from "./functions/invitations/acceptInvitation";
 
 import { submitAttemptHandler } from "./functions/attempts/submitAttempt";
-import { calculateScoreHandler } from "./functions/attempts/calculateScore";
 
 import { awardXPHandler } from "./functions/gamification/awardXP";
 import { awardCoinsHandler } from "./functions/gamification/awardCoins";
@@ -69,10 +68,6 @@ export const submitAttempt = onCall(async (request) => {
             }
             : null,
     );
-});
-
-export const calculateScore = onCall(async (request) => {
-    return calculateScoreHandler(request.data);
 });
 
 // ============================================================

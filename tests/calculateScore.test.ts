@@ -1,39 +1,65 @@
-import { describe, expect, it } from "vitest";
+import {
+    describe,
+    expect,
+    it,
+} from "vitest";
 
 import {
     calculateScoreHandler,
 } from "../src/functions/attempts/calculateScore";
 
 describe("calculateScore", () => {
-    it("calcula correctamente una puntuación", () => {
-        const result = calculateScoreHandler({
-            activityId: "activity-test-001",
-            answers: {
-                q1: { isCorrect: true },
-                q2: { isCorrect: true },
-                q3: { isCorrect: false },
-                q4: { isCorrect: true },
-            },
-        });
+    it("calcula correctamente una puntuación usando la clave privada", () => {
+        const result =
+            calculateScoreHandler({
+                activityId:
+                    "activity-test-001",
 
-        expect(result).toEqual({
-            score: 8,
-            correctAnswers: 3,
-            totalAnswers: 4,
-        });
+                answers: {
+                    q1: "option-a",
+                    q2: "option-b",
+                    q3: "option-a",
+                    q4: "option-c",
+                },
+
+                answerKey: {
+                    q1: "option-a",
+                    q2: "option-b",
+                    q3: "option-b",
+                    q4: "option-c",
+                },
+            });
+
+        expect(result.score).toBe(8);
+        expect(result.correctAnswers)
+            .toBe(3);
+        expect(result.totalQuestions)
+            .toBe(4);
+        expect(result.passed)
+            .toBe(true);
     });
 
     it("devuelve cero cuando no hay respuestas", () => {
-        const result = calculateScoreHandler({
-            activityId: "activity-test-001",
-            answers: {},
-        });
+        const result =
+            calculateScoreHandler({
+                activityId:
+                    "activity-test-001",
 
-        expect(result).toEqual({
-            score: 0,
-            correctAnswers: 0,
-            totalAnswers: 0,
-        });
+                answers: {},
+
+                answerKey: {
+                    q1: "option-a",
+                    q2: "option-b",
+                },
+            });
+
+        expect(result.score).toBe(0);
+        expect(result.correctAnswers)
+            .toBe(0);
+        expect(result.totalQuestions)
+            .toBe(2);
+        expect(result.passed)
+            .toBe(false);
     });
 
     it("rechaza activityId vacío", () => {
@@ -41,6 +67,7 @@ describe("calculateScore", () => {
             calculateScoreHandler({
                 activityId: "",
                 answers: {},
+                answerKey: {},
             }),
         ).toThrow();
     });
@@ -48,12 +75,69 @@ describe("calculateScore", () => {
     it("rechaza respuestas inválidas", () => {
         expect(() =>
             calculateScoreHandler({
-                activityId: "activity-test-001",
-                answers: null as unknown as Record<
-                    string,
-                    unknown
-                >,
+                activityId:
+                    "activity-test-001",
+
+                answers:
+                    null as unknown as Record<
+                        string,
+                        unknown
+                    >,
+
+                answerKey: {},
             }),
         ).toThrow();
+    });
+
+    it("no permite que isCorrect manipule la puntuación", () => {
+        const result =
+            calculateScoreHandler({
+                activityId:
+                    "activity-test-001",
+
+                answers: {
+                    q1: {
+                        isCorrect: true,
+                    },
+                },
+
+                answerKey: {
+                    q1: "option-b",
+                },
+            });
+
+        expect(result.correctAnswers)
+            .toBe(0);
+
+        expect(result.score)
+            .toBe(0);
+    });
+
+    it("acepta respuestas múltiples sin importar el orden", () => {
+        const result =
+            calculateScoreHandler({
+                activityId:
+                    "activity-test-001",
+
+                answers: {
+                    q1: [
+                        "option-b",
+                        "option-a",
+                    ],
+                },
+
+                answerKey: {
+                    q1: [
+                        "option-a",
+                        "option-b",
+                    ],
+                },
+            });
+
+        expect(result.correctAnswers)
+            .toBe(1);
+
+        expect(result.score)
+            .toBe(10);
     });
 });
