@@ -1,5 +1,17 @@
-import { getFirestore } from 'firebase-admin/firestore';
-import { HttpsError } from 'firebase-functions/v2/https';
+import { getApps, initializeApp } from "firebase-admin/app";
+import { getFirestore } from "firebase-admin/firestore";
+import { HttpsError } from "firebase-functions/v2/https";
+
+process.env.FIRESTORE_EMULATOR_HOST ??= "127.0.0.1:8081";
+
+const projectId =
+    process.env.GCLOUD_PROJECT ?? "eduplay-test";
+
+if (getApps().length === 0) {
+    initializeApp({
+        projectId,
+    });
+}
 
 interface InitializeGamificationProfileData {
     studentId: string;
@@ -20,33 +32,33 @@ export async function initializeGamificationProfileHandler(
 ): Promise<InitializeGamificationProfileResult> {
     if (!auth) {
         throw new HttpsError(
-            'unauthenticated',
-            'Debes iniciar sesión.',
+            "unauthenticated",
+            "Debes iniciar sesión.",
         );
     }
 
     if (
         !data ||
-        typeof data.studentId !== 'string' ||
-        data.studentId.trim() === ''
+        typeof data.studentId !== "string" ||
+        data.studentId.trim() === ""
     ) {
         throw new HttpsError(
-            'invalid-argument',
-            'studentId es obligatorio.',
+            "invalid-argument",
+            "studentId es obligatorio.",
         );
     }
 
     if (auth.uid !== data.studentId) {
         throw new HttpsError(
-            'permission-denied',
-            'No puedes crear el perfil de otro estudiante.',
+            "permission-denied",
+            "No puedes crear el perfil de otro estudiante.",
         );
     }
 
     const database = getFirestore();
 
     const profileReference = database
-        .collection('gamificationProfiles')
+        .collection("gamificationProfiles")
         .doc(data.studentId);
 
     const result = await database.runTransaction(
@@ -76,22 +88,22 @@ export async function initializeGamificationProfileHandler(
                     mathematics: {
                         percentage: 0,
                         level: 1,
-                        label: 'Básico',
+                        label: "Básico",
                     },
                     english: {
                         percentage: 0,
                         level: 1,
-                        label: 'Básico',
+                        label: "Básico",
                     },
                     science: {
                         percentage: 0,
                         level: 1,
-                        label: 'Básico',
+                        label: "Básico",
                     },
                     history: {
                         percentage: 0,
                         level: 1,
-                        label: 'Básico',
+                        label: "Básico",
                     },
                 },
 

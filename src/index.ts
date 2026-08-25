@@ -23,7 +23,9 @@ import { validateAIContentHandler } from "./functions/ai/validateAIContent";
 
 import {
     initializeGamificationProfileHandler,
-} from './functions/gamification/initializeGamificationProfile';
+} from "./functions/gamification/initializeGamificationProfile";
+
+import { getActivityForAttempt } from "./functions/activities/getActivity";
 
 setGlobalOptions({
     maxInstances: 10,
@@ -83,6 +85,9 @@ export const awardCoins = onCall(async (request) => {
 });
 
 export const initializeGamificationProfile = onCall(
+    {
+        cors: ["http://localhost:5173"],
+    },
     async (request) => {
         return initializeGamificationProfileHandler(
             request.data,
@@ -191,3 +196,27 @@ export const validateAIContent = onCall(async (request) => {
             : null,
     );
 });
+
+// ============================================================
+// ACTIVITIES
+// ============================================================
+
+export const getActivity = onCall(
+    {
+        cors: ["http://localhost:5173"],
+    },
+    async (request) => {
+        const activityId =
+            request.data?.activityId;
+
+        const result =
+            await getActivityForAttempt(
+                activityId,
+            );
+
+        return {
+            activity: result.activity,
+            config: result.config,
+        };
+    },
+);

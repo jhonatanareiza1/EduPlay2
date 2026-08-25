@@ -1,4 +1,28 @@
-import { HttpsError } from "firebase-functions/v2/https";
+import {
+    getApps,
+    initializeApp,
+} from "firebase-admin/app";
+
+import {
+    getFirestore,
+} from "firebase-admin/firestore";
+
+import {
+    HttpsError,
+} from "firebase-functions/v2/https";
+
+process.env.FIRESTORE_EMULATOR_HOST ??=
+    "127.0.0.1:8081";
+
+const projectId =
+    process.env.GCLOUD_PROJECT
+    ?? "eduplay-test";
+
+if (getApps().length === 0) {
+    initializeApp({
+        projectId,
+    });
+}
 
 export interface UnlockAchievementData {
     studentId: string;
@@ -11,9 +35,9 @@ export interface UnlockAchievementResult {
     unlocked: true;
 }
 
-export function unlockAchievementHandler(
+export async function unlockAchievementHandler(
     data: UnlockAchievementData,
-): UnlockAchievementResult {
+): Promise<UnlockAchievementResult> {
     if (
         !data ||
         typeof data.studentId !== "string" ||
@@ -33,6 +57,37 @@ export function unlockAchievementHandler(
             "invalid-argument",
             "achievementId es obligatorio.",
         );
+    }
+
+    const database = getFirestore();
+
+    const profileReference = database
+        .collection("gamificationProfiles")
+        .doc(data.studentId);
+
+    const profileSnapshot =
+        await profileReference.get();
+
+    if (!profileSnapshot.exists) {
+        throw new HttpsError(
+            "not-found",
+            "El perfil de gamificación no existe.",
+        );
+    }
+
+    const achievementReference =
+        profileReference
+            .collection("achievements")
+            .doc(data.achievementId);
+
+    const achievementSnapshot =
+        await achievementReference.get();
+
+    if (!achievementSnapshot.exists) {
+        await achievementReference.create({
+            achievementId: data.achievementId,
+            unlockedAt: new Date(),
+        });
     }
 
     return {

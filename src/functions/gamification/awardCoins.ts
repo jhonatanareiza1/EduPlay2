@@ -1,4 +1,29 @@
-import { HttpsError } from "firebase-functions/v2/https";
+import {
+    getApps,
+    initializeApp,
+} from "firebase-admin/app";
+
+import {
+    FieldValue,
+    getFirestore,
+} from "firebase-admin/firestore";
+
+import {
+    HttpsError,
+} from "firebase-functions/v2/https";
+
+process.env.FIRESTORE_EMULATOR_HOST ??=
+    "127.0.0.1:8081";
+
+const projectId =
+    process.env.GCLOUD_PROJECT
+    ?? "eduplay-test";
+
+if (getApps().length === 0) {
+    initializeApp({
+        projectId,
+    });
+}
 
 export interface AwardCoinsData {
     studentId: string;
@@ -10,11 +35,12 @@ export interface AwardCoinsResult {
     studentId: string;
     amount: number;
     reason: string;
+    coins: number;
 }
 
-export function awardCoinsHandler(
+export async function awardCoinsHandler(
     data: AwardCoinsData,
-): AwardCoinsResult {
+): Promise<AwardCoinsResult> {
     if (
         !data ||
         typeof data.studentId !== "string" ||
@@ -47,9 +73,51 @@ export function awardCoinsHandler(
         );
     }
 
+    const database = getFirestore();
+
+    const profileReference = database
+        .collection("gamificationProfiles")
+        .doc(data.studentId);
+
+    const result = await database.runTransaction(
+        async (transaction) => {
+            const profileSnapshot =
+                await transaction.get(profileReference);
+
+            if (!profileSnapshot.exists) {
+                throw new HttpsError(
+                    "not-found",
+                    "El perfil de gamificación no existe.",
+                );
+            }
+
+            const profileData =
+                profileSnapshot.data();
+
+            const currentCoins =
+                typeof profileData?.coins === "number"
+                    ? profileData.coins
+                    : 0;
+
+            const newCoins =
+                currentCoins + data.amount;
+
+            transaction.update(
+                profileReference,
+                {
+                    coins: FieldValue.increment(data.amount),
+                    updatedAt: new Date(),
+                },
+            );
+
+            return newCoins;
+        },
+    );
+
     return {
         studentId: data.studentId,
         amount: data.amount,
         reason: data.reason,
+        coins: result,
     };
 }

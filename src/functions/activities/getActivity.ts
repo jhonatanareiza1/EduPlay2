@@ -7,6 +7,16 @@ process.env.FIRESTORE_EMULATOR_HOST ??= "127.0.0.1:8081";
 const projectId =
     process.env.GCLOUD_PROJECT ?? "eduplay-test";
 
+console.log(
+    "[getActivity] projectId:",
+    projectId,
+);
+
+console.log(
+    "[getActivity] GCLOUD_PROJECT:",
+    process.env.GCLOUD_PROJECT,
+);
+
 if (getApps().length === 0) {
     initializeApp({
         projectId,
@@ -80,7 +90,28 @@ export async function getActivityForAttempt(
         .collection("activities")
         .doc(activityId);
 
-    const activitySnap = await activityRef.get();
+    const activitySnap =
+        await activityRef.get();
+
+    console.log(
+        "[getActivity] activityId:",
+        activityId,
+    );
+
+    console.log(
+        "[getActivity] projectId:",
+        projectId,
+    );
+
+    console.log(
+        "[getActivity] FIRESTORE_EMULATOR_HOST:",
+        process.env.FIRESTORE_EMULATOR_HOST,
+    );
+
+    console.log(
+        "[getActivity] activity exists:",
+        activitySnap.exists,
+    );
 
     if (!activitySnap.exists) {
         throw new HttpsError(
@@ -102,7 +133,8 @@ export async function getActivityForAttempt(
         );
     }
 
-    const configId = activityData.configId;
+    const configId =
+        activityData.configId;
 
     if (
         typeof configId !== "string" ||
@@ -122,11 +154,13 @@ export async function getActivityForAttempt(
         .collection("activityAnswerKeys")
         .doc(activityId);
 
-    const [configSnap, answerKeySnap] =
-        await Promise.all([
-            configRef.get(),
-            answerKeyRef.get(),
-        ]);
+    const [
+        configSnap,
+        answerKeySnap,
+    ] = await Promise.all([
+        configRef.get(),
+        answerKeyRef.get(),
+    ]);
 
     if (!configSnap.exists) {
         throw new HttpsError(
@@ -155,21 +189,30 @@ export async function getActivityForAttempt(
         );
     }
 
-    if (configData.ownerTeacherId !== ownerTeacherId) {
+    if (
+        configData.ownerTeacherId !==
+        ownerTeacherId
+    ) {
         throw new HttpsError(
             "failed-precondition",
             "La configuración pertenece a otro docente.",
         );
     }
 
-    if (answerKeyData.activityId !== activityId) {
+    if (
+        answerKeyData.activityId !==
+        activityId
+    ) {
         throw new HttpsError(
             "failed-precondition",
             "Las respuestas correctas no pertenecen a la actividad.",
         );
     }
 
-    if (answerKeyData.ownerTeacherId !== ownerTeacherId) {
+    if (
+        answerKeyData.ownerTeacherId !==
+        ownerTeacherId
+    ) {
         throw new HttpsError(
             "failed-precondition",
             "Las respuestas correctas pertenecen a otro docente.",
@@ -177,8 +220,18 @@ export async function getActivityForAttempt(
     }
 
     if (
-        !Array.isArray(configData.questions)
-        || configData.questions.length === 0
+        !Array.isArray(
+            configData.questions,
+        )
+    ) {
+        throw new HttpsError(
+            "failed-precondition",
+            "La actividad no tiene preguntas válidas.",
+        );
+    }
+
+    if (
+        configData.questions.length === 0
     ) {
         throw new HttpsError(
             "failed-precondition",
@@ -186,94 +239,80 @@ export async function getActivityForAttempt(
         );
     }
 
+    const questions =
+        configData.questions as
+        ActivityConfigDocument["questions"];
+
+    const answers =
+        answerKeyData.answers;
+
     if (
-        !answerKeyData.answers
-        || typeof answerKeyData.answers !== "object"
-        || Array.isArray(answerKeyData.answers)
+        !answers ||
+        typeof answers !== "object" ||
+        Array.isArray(answers)
     ) {
         throw new HttpsError(
             "failed-precondition",
-            "Las respuestas correctas tienen un formato inválido.",
+            "La clave de respuestas no es válida.",
         );
     }
 
-    const activity: ActivityDocument = {
-        id: activityId,
-        title:
-            typeof activityData.title === "string"
-                ? activityData.title
-                : "",
-        ...(typeof activityData.description === "string"
-            ? { description: activityData.description }
-            : {}),
-        ...(typeof activityData.type === "string"
-            ? { type: activityData.type }
-            : {}),
-        ownerTeacherId,
-        ...(typeof activityData.subjectId === "string"
-            ? { subjectId: activityData.subjectId }
-            : {}),
-        ...(typeof activityData.topicId === "string"
-            ? { topicId: activityData.topicId }
-            : {}),
-        configId,
-        ...(typeof activityData.isPublished === "boolean"
-            ? { isPublished: activityData.isPublished }
-            : {}),
-        ...(activityData.createdAt !== undefined
-            ? { createdAt: activityData.createdAt }
-            : {}),
-        ...(activityData.updatedAt !== undefined
-            ? { updatedAt: activityData.updatedAt }
-            : {}),
-    };
-
-    const config: ActivityConfigDocument = {
-        id: configId,
-        activityId,
-        ownerTeacherId,
-        questions:
-            configData.questions as ActivityConfigDocument["questions"],
-        ...(typeof configData.timeLimitSeconds === "number"
-            ? {
-                timeLimitSeconds:
-                    configData.timeLimitSeconds,
-            }
-            : {}),
-        ...(typeof configData.shuffleQuestions === "boolean"
-            ? {
-                shuffleQuestions:
-                    configData.shuffleQuestions,
-            }
-            : {}),
-        ...(typeof configData.shuffleOptions === "boolean"
-            ? {
-                shuffleOptions:
-                    configData.shuffleOptions,
-            }
-            : {}),
-        ...(typeof configData.passingScore === "number"
-            ? {
-                passingScore:
-                    configData.passingScore,
-            }
-            : {}),
-    };
-
-    const answerKey: ActivityAnswerKeyDocument = {
-        id: activityId,
-        activityId,
-        ownerTeacherId,
-        answers:
-            answerKeyData.answers as Record<
-                string,
-                string | string[]
-            >,
-    };
-
     return {
-        activity,
-        config,
-        answerKey,
+        activity: {
+            id: activitySnap.id,
+            title:
+                activityData.title as string,
+            description:
+                activityData.description as
+                string | undefined,
+            type:
+                activityData.type as
+                string | undefined,
+            ownerTeacherId,
+            subjectId:
+                activityData.subjectId as
+                string | undefined,
+            topicId:
+                activityData.topicId as
+                string | undefined,
+            configId,
+            isPublished:
+                activityData.isPublished as
+                boolean | undefined,
+            createdAt:
+                activityData.createdAt,
+            updatedAt:
+                activityData.updatedAt,
+        },
+
+        config: {
+            id: configSnap.id,
+            activityId,
+            ownerTeacherId,
+            questions,
+            timeLimitSeconds:
+                configData.timeLimitSeconds as
+                number | undefined,
+            shuffleQuestions:
+                configData.shuffleQuestions as
+                boolean | undefined,
+            shuffleOptions:
+                configData.shuffleOptions as
+                boolean | undefined,
+            passingScore:
+                configData.passingScore as
+                number | undefined,
+        },
+
+        answerKey: {
+            id: answerKeySnap.id,
+            activityId,
+            ownerTeacherId,
+            answers:
+                answers as Record<
+                    string,
+                    string | string[]
+                >,
+        },
     };
 }

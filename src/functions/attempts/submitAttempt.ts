@@ -86,7 +86,7 @@ export async function submitAttemptHandler(
     const db = getFirestore();
 
     const studentRef = db
-        .collection("students")
+        .collection("users")
         .doc(studentId);
 
     const studentSnap =
