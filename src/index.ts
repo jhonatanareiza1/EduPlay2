@@ -25,7 +25,13 @@ import {
     initializeGamificationProfileHandler,
 } from "./functions/gamification/initializeGamificationProfile";
 
-import { getActivityForAttempt } from "./functions/activities/getActivity";
+import {
+    getActivityForAttempt,
+} from "./functions/activities/getActivity";
+
+import {
+    listPublishedActivities,
+} from "./functions/activities/listActivities";
 
 setGlobalOptions({
     maxInstances: 10,
@@ -217,6 +223,18 @@ export const getActivity = onCall(
         return {
             activity: result.activity,
             config: result.config,
+        };
+    },
+);
+
+export const listStudentActivities = onCall(
+    {
+        cors: ["http://localhost:5173"],
+    },
+    async () => {
+        return {
+            activities:
+                await listPublishedActivities(),
         };
     },
 );

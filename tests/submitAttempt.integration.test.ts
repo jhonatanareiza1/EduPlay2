@@ -33,19 +33,24 @@ const PROJECT_ID =
 beforeAll(async () => {
   testEnv =
     await initializeTestEnvironment({
-      projectId: PROJECT_ID,
+      projectId:
+        PROJECT_ID,
 
       firestore: {
-        host: "127.0.0.1",
-        port: 8081,
+        host:
+          "127.0.0.1",
 
-        rules: readFileSync(
-          resolve(
-            process.cwd(),
-            "../firestore.rules",
+        port:
+          8081,
+
+        rules:
+          readFileSync(
+            resolve(
+              process.cwd(),
+              "../firestore.rules",
+            ),
+            "utf8",
           ),
-          "utf8",
-        ),
       },
     });
 });
@@ -63,282 +68,954 @@ beforeEach(async () => {
 describe(
   "submitAttempt - integración",
   () => {
-    it("crea un intento y calcula el score en backend", async () => {
-      const studentId =
-        "student-test-001";
+    it(
+      "crea un intento, calcula el score y entrega XP/EduCoins",
+      async () => {
+        const studentId =
+          "student-test-001";
 
-      const activityId =
-        "activity-test-001";
+        const activityId =
+          "activity-test-001";
 
-      const configId =
-        "config-test-001";
+        const configId =
+          "config-test-001";
 
-      await testEnv
-        .withSecurityRulesDisabled(
-          async (context) => {
-            const db =
-              context.firestore();
+        const attemptId =
+          "attempt-test-001";
 
-            await setDoc(
-              doc(
-                db,
-                "students",
-                studentId,
-              ),
-              {
-                userId:
+        await testEnv
+          .withSecurityRulesDisabled(
+            async (context) => {
+              const db =
+                context.firestore();
+
+              await setDoc(
+                doc(
+                  db,
+                  "users",
                   studentId,
-              },
-            );
+                ),
+                {
+                  uid:
+                    studentId,
 
-            await setDoc(
-              doc(
-                db,
-                "activities",
-                activityId,
-              ),
-              {
-                title:
-                  "Actividad de prueba",
+                  role:
+                    "student",
 
-                ownerTeacherId:
-                  "teacher-test-001",
-
-                configId,
-
-                type: "quiz",
-
-                isPublished:
-                  true,
-              },
-            );
-
-            await setDoc(
-              doc(
-                db,
-                "activityConfigs",
-                configId,
-              ),
-              {
-                activityId,
-
-                ownerTeacherId:
-                  "teacher-test-001",
-
-                questions: [
-                  {
-                    id: "question1",
-                    type:
-                      "multiple-choice",
-                    text:
-                      "Pregunta 1",
-                    options: [
-                      {
-                        id:
-                          "option-a",
-                        text:
-                          "Correcta",
-                      },
-                      {
-                        id:
-                          "option-b",
-                        text:
-                          "Incorrecta",
-                      },
-                    ],
-                    points: 5,
-                  },
-                  {
-                    id: "question2",
-                    type:
-                      "multiple-choice",
-                    text:
-                      "Pregunta 2",
-                    options: [
-                      {
-                        id:
-                          "option-a",
-                        text:
-                          "Incorrecta",
-                      },
-                      {
-                        id:
-                          "option-b",
-                        text:
-                          "Correcta",
-                      },
-                    ],
-                    points: 5,
-                  },
-                ],
-                passingScore: 6,
-              },
-            );
-
-            await setDoc(
-              doc(
-                db,
-                "activityAnswerKeys",
-                activityId,
-              ),
-              {
-                activityId,
-
-                ownerTeacherId:
-                  "teacher-test-001",
-
-                answers: {
-                  question1:
-                    "option-a",
-
-                  question2:
-                    "option-b",
+                  name:
+                    "Estudiante de prueba",
                 },
-              },
-            );
-          },
-        );
+              );
 
-      const result =
-        await submitAttemptHandler(
-          {
-            activityId,
-            studentId,
-
-            answers: {
-              question1:
-                "option-a",
-
-              question2:
-                "option-b",
-            },
-          },
-          {
-            uid: studentId,
-          },
-        );
-
-      expect(result.success)
-        .toBe(true);
-
-      expect(result.attemptId)
-        .toBeDefined();
-
-      expect(result.score)
-        .toBe(10);
-
-      expect(result.correctAnswers)
-        .toBe(2);
-
-      expect(result.totalQuestions)
-        .toBe(2);
-
-      expect(result.passed)
-        .toBe(true);
-
-      const context =
-        testEnv.authenticatedContext(
-          studentId,
-        );
-
-      const attemptSnap =
-        await getDoc(
-          doc(
-            context.firestore(),
-            "attempts",
-            result.attemptId,
-          ),
-        );
-
-      expect(
-        attemptSnap.exists(),
-      ).toBe(true);
-
-      expect(
-        attemptSnap.data(),
-      ).toMatchObject({
-        studentId,
-        activityId,
-
-        answers: {
-          question1:
-            "option-a",
-
-          question2:
-            "option-b",
-        },
-
-        score: 10,
-        correctAnswers: 2,
-        totalQuestions: 2,
-        passed: true,
-        status: "submitted",
-      });
-    });
-
-    it("rechaza una actividad sin configuración", async () => {
-      const studentId =
-        "student-test-002";
-
-      const activityId =
-        "activity-test-002";
-
-      await testEnv
-        .withSecurityRulesDisabled(
-          async (context) => {
-            const db =
-              context.firestore();
-
-            await setDoc(
-              doc(
-                db,
-                "students",
-                studentId,
-              ),
-              {
-                userId:
+              await setDoc(
+                doc(
+                  db,
+                  "students",
                   studentId,
+                ),
+                {
+                  userId:
+                    studentId,
+                },
+              );
+
+              await setDoc(
+                doc(
+                  db,
+                  "activities",
+                  activityId,
+                ),
+                {
+                  title:
+                    "Actividad de prueba",
+
+                  ownerTeacherId:
+                    "teacher-test-001",
+
+                  configId,
+
+                  type:
+                    "quiz",
+
+                  isPublished:
+                    true,
+
+                  subjectId:
+                    "mathematics",
+                },
+              );
+
+              await setDoc(
+                doc(
+                  db,
+                  "activityConfigs",
+                  configId,
+                ),
+                {
+                  activityId,
+
+                  ownerTeacherId:
+                    "teacher-test-001",
+
+                  questions: [
+                    {
+                      id:
+                        "question1",
+
+                      type:
+                        "multiple-choice",
+
+                      text:
+                        "Pregunta 1",
+
+                      options: [
+                        {
+                          id:
+                            "option-a",
+
+                          text:
+                            "Correcta",
+                        },
+                        {
+                          id:
+                            "option-b",
+
+                          text:
+                            "Incorrecta",
+                        },
+                      ],
+
+                      points:
+                        5,
+                    },
+                    {
+                      id:
+                        "question2",
+
+                      type:
+                        "multiple-choice",
+
+                      text:
+                        "Pregunta 2",
+
+                      options: [
+                        {
+                          id:
+                            "option-a",
+
+                          text:
+                            "Incorrecta",
+                        },
+                        {
+                          id:
+                            "option-b",
+
+                          text:
+                            "Correcta",
+                        },
+                      ],
+
+                      points:
+                        5,
+                    },
+                  ],
+
+                  passingScore:
+                    6,
+                },
+              );
+
+              await setDoc(
+                doc(
+                  db,
+                  "activityAnswerKeys",
+                  activityId,
+                ),
+                {
+                  activityId,
+
+                  ownerTeacherId:
+                    "teacher-test-001",
+
+                  answers: {
+                    question1:
+                      "option-a",
+
+                    question2:
+                      "option-b",
+                  },
+                },
+              );
+
+              await setDoc(
+                doc(
+                  db,
+                  "gamificationProfiles",
+                  studentId,
+                ),
+                {
+                  studentId,
+
+                  totalXP:
+                    0,
+
+                  level:
+                    1,
+
+                  coins:
+                    0,
+
+                  currentStreak:
+                    0,
+
+                  bestStreak:
+                    0,
+
+                  subjects: {
+                    mathematics: {
+                      percentage:
+                        0,
+
+                      level:
+                        1,
+
+                      label:
+                        "Básico",
+                    },
+
+                    english: {
+                      percentage:
+                        0,
+
+                      level:
+                        1,
+
+                      label:
+                        "Básico",
+                    },
+
+                    science: {
+                      percentage:
+                        0,
+
+                      level:
+                        1,
+
+                      label:
+                        "Básico",
+                    },
+
+                    history: {
+                      percentage:
+                        0,
+
+                      level:
+                        1,
+
+                      label:
+                        "Básico",
+                    },
+                  },
+
+                  lastActivityAt:
+                    null,
+
+                  createdAt:
+                    new Date(),
+
+                  updatedAt:
+                    new Date(),
+                },
+              );
+            },
+          );
+
+        const result =
+          await submitAttemptHandler(
+            {
+              activityId,
+
+              studentId,
+
+              attemptId,
+
+              answers: {
+                question1:
+                  "option-a",
+
+                question2:
+                  "option-b",
               },
-            );
+            },
+            {
+              uid:
+                studentId,
+            },
+          );
 
-            await setDoc(
-              doc(
-                db,
-                "activities",
-                activityId,
-              ),
-              {
-                title:
-                  "Actividad inválida",
+        expect(
+          result.success,
+        ).toBe(true);
 
-                ownerTeacherId:
-                  "teacher-test-001",
+        expect(
+          result.attemptId,
+        ).toBe(attemptId);
 
-                configId:
-                  "config-missing",
-              },
-            );
+        expect(
+          result.score,
+        ).toBe(10);
+
+        expect(
+          result.totalPoints,
+        ).toBe(10);
+
+        expect(
+          result.correctAnswers,
+        ).toBe(2);
+
+        expect(
+          result.totalQuestions,
+        ).toBe(2);
+
+        expect(
+          result.passed,
+        ).toBe(true);
+
+        expect(
+          result.gamification.xp,
+        ).toBe(20);
+
+        expect(
+          result.gamification.totalXP,
+        ).toBe(20);
+
+        expect(
+          result.gamification.coins,
+        ).toBe(10);
+
+        expect(
+          result.gamification.totalCoins,
+        ).toBe(10);
+
+        const context =
+          testEnv.authenticatedContext(
+            studentId,
+          );
+
+        const attemptSnap =
+          await getDoc(
+            doc(
+              context.firestore(),
+              "attempts",
+              result.attemptId,
+            ),
+          );
+
+        expect(
+          attemptSnap.exists(),
+        ).toBe(true);
+
+        expect(
+          attemptSnap.data(),
+        ).toMatchObject({
+          studentId,
+
+          activityId,
+
+          answers: {
+            question1:
+              "option-a",
+
+            question2:
+              "option-b",
           },
+
+          score:
+            10,
+
+          totalPoints:
+            10,
+
+          correctAnswers:
+            2,
+
+          totalQuestions:
+            2,
+
+          passed:
+            true,
+
+          status:
+            "submitted",
+
+          gamification: {
+            scorePercentage:
+              100,
+
+            xp:
+              20,
+
+            coins:
+              10,
+
+            rewarded:
+              true,
+          },
+        });
+
+        const profileSnap =
+          await getDoc(
+            doc(
+              context.firestore(),
+              "gamificationProfiles",
+              studentId,
+            ),
+          );
+
+        expect(
+          profileSnap.exists(),
+        ).toBe(true);
+
+        expect(
+          profileSnap.data(),
+        ).toMatchObject({
+          studentId,
+
+          totalXP:
+            20,
+
+          level:
+            1,
+
+          coins:
+            10,
+        });
+
+        /*
+         * Repetimos exactamente el mismo intento.
+         *
+         * El mismo attemptId debe devolver
+         * el resultado existente sin volver a
+         * entregar XP ni EduCoins.
+         */
+
+        const duplicateResult =
+          await submitAttemptHandler(
+            {
+              activityId,
+
+              studentId,
+
+              attemptId,
+
+              answers: {
+                question1:
+                  "option-a",
+
+                question2:
+                  "option-b",
+              },
+            },
+            {
+              uid:
+                studentId,
+            },
+          );
+
+        expect(
+          duplicateResult.success,
+        ).toBe(true);
+
+        expect(
+          duplicateResult.attemptId,
+        ).toBe(attemptId);
+
+        expect(
+          duplicateResult.score,
+        ).toBe(10);
+
+        expect(
+          duplicateResult.totalPoints,
+        ).toBe(10);
+
+        expect(
+          duplicateResult.correctAnswers,
+        ).toBe(2);
+
+        expect(
+          duplicateResult.totalQuestions,
+        ).toBe(2);
+
+        expect(
+          duplicateResult.passed,
+        ).toBe(true);
+
+        expect(
+          duplicateResult.gamification.xp,
+        ).toBe(20);
+
+        expect(
+          duplicateResult.gamification.totalXP,
+        ).toBe(20);
+
+        expect(
+          duplicateResult.gamification.coins,
+        ).toBe(10);
+
+        expect(
+          duplicateResult.gamification.totalCoins,
+        ).toBe(10);
+
+        /*
+         * Verificamos que el perfil NO haya recibido
+         * las recompensas nuevamente.
+         */
+
+        const profileAfterDuplicateSnap =
+          await getDoc(
+            doc(
+              context.firestore(),
+              "gamificationProfiles",
+              studentId,
+            ),
+          );
+
+        expect(
+          profileAfterDuplicateSnap.exists(),
+        ).toBe(true);
+
+        expect(
+          profileAfterDuplicateSnap.data(),
+        ).toMatchObject({
+          studentId,
+
+          totalXP:
+            20,
+
+          level:
+            1,
+
+          coins:
+            10,
+        });
+      },
+    );
+
+    it(
+      "rechaza una actividad sin configuración",
+      async () => {
+        const studentId =
+          "student-test-002";
+
+        const activityId =
+          "activity-test-002";
+
+        await testEnv
+          .withSecurityRulesDisabled(
+            async (context) => {
+              const db =
+                context.firestore();
+
+              await setDoc(
+                doc(
+                  db,
+                  "users",
+                  studentId,
+                ),
+                {
+                  uid:
+                    studentId,
+
+                  role:
+                    "student",
+
+                  name:
+                    "Estudiante de prueba",
+                },
+              );
+
+              await setDoc(
+                doc(
+                  db,
+                  "activities",
+                  activityId,
+                ),
+                {
+                  title:
+                    "Actividad sin configuración",
+
+                  ownerTeacherId:
+                    "teacher-test-001",
+
+                  configId:
+                    "missing-config",
+
+                  type:
+                    "quiz",
+
+                  isPublished:
+                    true,
+
+                  subjectId:
+                    "mathematics",
+                },
+              );
+            },
+          );
+
+        await expect(
+          submitAttemptHandler(
+            {
+              activityId,
+
+              studentId,
+
+              answers: {
+                question1:
+                  "option-a",
+              },
+            },
+            {
+              uid:
+                studentId,
+            },
+          ),
+        ).rejects.toThrow();
+      },
+    );
+
+    it(
+      "rechaza reutilizar un attemptId para otro estudiante",
+      async () => {
+        const studentId =
+          "student-test-003";
+
+        const otherStudentId =
+          "student-test-004";
+
+        const activityId =
+          "activity-test-003";
+
+        const configId =
+          "config-test-003";
+
+        const attemptId =
+          "attempt-test-003";
+
+        await testEnv
+          .withSecurityRulesDisabled(
+            async (context) => {
+              const db =
+                context.firestore();
+
+              await setDoc(
+                doc(
+                  db,
+                  "users",
+                  studentId,
+                ),
+                {
+                  uid:
+                    studentId,
+
+                  role:
+                    "student",
+
+                  name:
+                    "Estudiante 3",
+                },
+              );
+
+              await setDoc(
+                doc(
+                  db,
+                  "users",
+                  otherStudentId,
+                ),
+                {
+                  uid:
+                    otherStudentId,
+
+                  role:
+                    "student",
+
+                  name:
+                    "Estudiante 4",
+                },
+              );
+
+              await setDoc(
+                doc(
+                  db,
+                  "activities",
+                  activityId,
+                ),
+                {
+                  title:
+                    "Actividad de seguridad",
+
+                  ownerTeacherId:
+                    "teacher-test-001",
+
+                  configId,
+
+                  type:
+                    "quiz",
+
+                  isPublished:
+                    true,
+
+                  subjectId:
+                    "mathematics",
+                },
+              );
+
+              await setDoc(
+                doc(
+                  db,
+                  "activityConfigs",
+                  configId,
+                ),
+                {
+                  activityId,
+
+                  ownerTeacherId:
+                    "teacher-test-001",
+
+                  questions: [
+                    {
+                      id:
+                        "question1",
+
+                      type:
+                        "multiple-choice",
+
+                      text:
+                        "Pregunta 1",
+
+                      options: [
+                        {
+                          id:
+                            "option-a",
+
+                          text:
+                            "Correcta",
+                        },
+                        {
+                          id:
+                            "option-b",
+
+                          text:
+                            "Incorrecta",
+                        },
+                      ],
+
+                      points:
+                        5,
+                    },
+                  ],
+
+                  passingScore:
+                    5,
+                },
+              );
+
+              await setDoc(
+                doc(
+                  db,
+                  "activityAnswerKeys",
+                  activityId,
+                ),
+                {
+                  activityId,
+
+                  ownerTeacherId:
+                    "teacher-test-001",
+
+                  answers: {
+                    question1:
+                      "option-a",
+                  },
+                },
+              );
+
+              await setDoc(
+                doc(
+                  db,
+                  "gamificationProfiles",
+                  studentId,
+                ),
+                {
+                  studentId,
+
+                  totalXP:
+                    0,
+
+                  level:
+                    1,
+
+                  coins:
+                    0,
+
+                  currentStreak:
+                    0,
+
+                  bestStreak:
+                    0,
+
+                  subjects: {},
+
+                  lastActivityAt:
+                    null,
+
+                  createdAt:
+                    new Date(),
+
+                  updatedAt:
+                    new Date(),
+                },
+              );
+
+              await setDoc(
+                doc(
+                  db,
+                  "gamificationProfiles",
+                  otherStudentId,
+                ),
+                {
+                  studentId:
+                    otherStudentId,
+
+                  totalXP:
+                    0,
+
+                  level:
+                    1,
+
+                  coins:
+                    0,
+
+                  currentStreak:
+                    0,
+
+                  bestStreak:
+                    0,
+
+                  subjects: {},
+
+                  lastActivityAt:
+                    null,
+
+                  createdAt:
+                    new Date(),
+
+                  updatedAt:
+                    new Date(),
+                },
+              );
+
+              await setDoc(
+                doc(
+                  db,
+                  "attempts",
+                  attemptId,
+                ),
+                {
+                  studentId,
+
+                  activityId,
+
+                  answers: {
+                    question1:
+                      "option-a",
+                  },
+
+                  score:
+                    5,
+
+                  totalPoints:
+                    5,
+
+                  correctAnswers:
+                    1,
+
+                  totalQuestions:
+                    1,
+
+                  passed:
+                    true,
+
+                  status:
+                    "submitted",
+
+                  gamification: {
+                    scorePercentage:
+                      100,
+
+                    xp:
+                      20,
+
+                    coins:
+                      10,
+
+                    rewarded:
+                      true,
+                  },
+
+                  createdAt:
+                    new Date(),
+                },
+              );
+            },
+          );
+
+        await expect(
+          submitAttemptHandler(
+            {
+              activityId,
+
+              studentId:
+                otherStudentId,
+
+              attemptId,
+
+              answers: {
+                question1:
+                  "option-a",
+              },
+            },
+            {
+              uid:
+                otherStudentId,
+            },
+          ),
+        ).rejects.toThrow(
+          "El attemptId ya pertenece a otro intento.",
         );
 
-      await expect(
-        submitAttemptHandler(
-          {
-            activityId,
-            studentId,
+        const otherProfileSnap =
+          await getDoc(
+            doc(
+              testEnv
+                .authenticatedContext(
+                  otherStudentId,
+                )
+                .firestore(),
+              "gamificationProfiles",
+              otherStudentId,
+            ),
+          );
 
-            answers: {
-              question1:
-                "option-a",
-            },
-          },
-          {
-            uid: studentId,
-          },
-        ),
-      ).rejects.toMatchObject({
-        code: "not-found",
-      });
-    });
+        expect(
+          otherProfileSnap.data(),
+        ).toMatchObject({
+          totalXP:
+            0,
+
+          coins:
+            0,
+        });
+      },
+    );
   },
 );

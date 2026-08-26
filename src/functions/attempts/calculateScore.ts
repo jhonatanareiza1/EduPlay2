@@ -169,12 +169,7 @@ export function calculateScoreHandler(
             };
         });
 
-    const score =
-        totalPoints === 0
-            ? 0
-            : Math.round(
-                (earnedPoints / totalPoints) * 10,
-            );
+    const score = earnedPoints;
 
     const passingScore =
         typeof data.passingScore === "number"
