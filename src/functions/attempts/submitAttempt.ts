@@ -142,15 +142,15 @@ export async function submitAttemptHandler(
     const db =
         getFirestore();
 
-    const studentRef =
+    const studentReference =
         db
             .collection("users")
             .doc(studentId);
 
-    const studentSnap =
-        await studentRef.get();
+    const studentSnapshot =
+        await studentReference.get();
 
-    if (!studentSnap.exists) {
+    if (!studentSnapshot.exists) {
         throw new HttpsError(
             "not-found",
             "El estudiante no existe.",
@@ -191,10 +191,14 @@ export async function submitAttemptHandler(
     const score =
         calculateScoreHandler({
             activityId,
+
             answers,
+
             answerKey:
                 answerKey.answers,
+
             pointsByQuestion,
+
             passingScore:
                 config.passingScore,
         });
@@ -214,9 +218,10 @@ export async function submitAttemptHandler(
 
     /*
      * El attemptId funciona como identificador
-     * idempotente de la operación.
+     * idempotente del intento.
      */
-    const attemptRef =
+
+    const attemptReference =
         attemptId
             ? db
                 .collection("attempts")
@@ -226,21 +231,21 @@ export async function submitAttemptHandler(
                 .doc();
 
     /*
-     * Primero comprobamos si el intento ya existe.
-     *
-     * Esto debe ocurrir antes de actualizar progreso
-     * o entregar recompensas.
+     * =========================================
+     * COMPROBACIÓN DE ATTEMPT EXISTENTE
+     * =========================================
      */
-    const existingAttemptSnap =
-        await attemptRef.get();
 
-    if (existingAttemptSnap.exists) {
+    const existingAttemptSnapshot =
+        await attemptReference.get();
+
+    if (existingAttemptSnapshot.exists) {
         const existingData =
-            existingAttemptSnap.data();
+            existingAttemptSnapshot.data() ?? {};
 
         if (
-            existingData?.studentId !== studentId
-            || existingData?.activityId !== activityId
+            existingData.studentId !== studentId
+            || existingData.activityId !== activityId
         ) {
             throw new HttpsError(
                 "already-exists",
@@ -249,13 +254,13 @@ export async function submitAttemptHandler(
         }
 
         const existingGamification =
-            existingData?.gamification ?? {};
+            existingData.gamification ?? {};
 
         return {
             success: true,
 
             attemptId:
-                attemptRef.id,
+                attemptReference.id,
 
             activity: {
                 id:
@@ -289,7 +294,7 @@ export async function submitAttemptHandler(
 
                 xp:
                     existingGamification.xp
-                    ?? reward.xp,
+                    ?? 0,
 
                 totalXP:
                     existingGamification.totalXP
@@ -301,20 +306,26 @@ export async function submitAttemptHandler(
 
                 coins:
                     existingGamification.coins
-                    ?? reward.coins,
+                    ?? 0,
 
                 totalCoins:
                     existingGamification.totalCoins
                     ?? 0,
+
+                rewarded:
+                    existingGamification.rewarded
+                    ?? false,
             },
         };
     }
 
     /*
-     * Creamos el intento antes de otorgar
-     * recompensas.
+     * =========================================
+     * CREAR ATTEMPT
+     * =========================================
      */
-    await attemptRef.create({
+
+    await attemptReference.create({
         studentId,
 
         activityId,
@@ -352,10 +363,16 @@ export async function submitAttemptHandler(
             scorePercentage,
 
             xp:
-                reward.xp,
+                0,
 
             coins:
-                reward.coins,
+                0,
+
+            totalXP:
+                0,
+
+            totalCoins:
+                0,
 
             rewarded:
                 false,
@@ -366,15 +383,86 @@ export async function submitAttemptHandler(
     });
 
     /*
-     * Actualizamos progreso por materia.
+     * =========================================
+     * ACTUALIZAR PROGRESO
+     * =========================================
      */
-    await updateProgressHandler(
-        {
-            studentId,
 
-            activityId,
+    const progressResult =
+        await updateProgressHandler(
+            {
+                studentId,
 
-            subjectId,
+                activityId,
+
+                subjectId,
+
+                score:
+                    score.score,
+
+                totalPoints:
+                    score.totalPoints,
+
+                passed:
+                    score.passed,
+            },
+            {
+                uid:
+                    studentId,
+            },
+        );
+
+    /*
+     * =========================================
+     * ACTIVIDAD YA CONTABILIZADA
+     * =========================================
+     *
+     * El intento se conserva.
+     *
+     * Pero NO:
+     *
+     * - suma progreso nuevamente
+     * - entrega XP nuevamente
+     * - entrega EduCoins nuevamente
+     */
+
+    if (!progressResult.counted) {
+        await attemptReference.update({
+            gamification: {
+                scorePercentage,
+
+                xp:
+                    0,
+
+                coins:
+                    0,
+
+                totalXP:
+                    0,
+
+                totalCoins:
+                    0,
+
+                rewarded:
+                    false,
+            },
+        });
+
+        return {
+            success: true,
+
+            attemptId:
+                attemptReference.id,
+
+            activity: {
+                id:
+                    activity.id,
+
+                title:
+                    activity.title,
+
+                subjectId,
+            },
 
             score:
                 score.score,
@@ -382,18 +470,45 @@ export async function submitAttemptHandler(
             totalPoints:
                 score.totalPoints,
 
+            correctAnswers:
+                score.correctAnswers,
+
+            totalQuestions:
+                score.totalQuestions,
+
             passed:
                 score.passed,
-        },
-        {
-            uid:
-                studentId,
-        },
-    );
+
+            gamification: {
+                scorePercentage,
+
+                xp:
+                    0,
+
+                totalXP:
+                    0,
+
+                level:
+                    1,
+
+                coins:
+                    0,
+
+                totalCoins:
+                    0,
+
+                rewarded:
+                    false,
+            },
+        };
+    }
 
     /*
-     * Otorgamos XP.
+     * =========================================
+     * OTORGAR XP
+     * =========================================
      */
+
     const xpResult =
         await awardXPHandler({
             studentId,
@@ -406,8 +521,11 @@ export async function submitAttemptHandler(
         });
 
     /*
-     * Otorgamos EduCoins.
+     * =========================================
+     * OTORGAR EDUCOINS
+     * =========================================
      */
+
     const coinsResult =
         await awardCoinsHandler({
             studentId,
@@ -420,9 +538,12 @@ export async function submitAttemptHandler(
         });
 
     /*
-     * Guardamos el resultado final de gamificación.
+     * =========================================
+     * GUARDAR GAMIFICACIÓN FINAL
+     * =========================================
      */
-    await attemptRef.update({
+
+    await attemptReference.update({
         gamification: {
             scorePercentage,
 
@@ -446,11 +567,17 @@ export async function submitAttemptHandler(
         },
     });
 
+    /*
+     * =========================================
+     * RESPUESTA FINAL
+     * =========================================
+     */
+
     return {
         success: true,
 
         attemptId:
-            attemptRef.id,
+            attemptReference.id,
 
         activity: {
             id:
@@ -494,6 +621,9 @@ export async function submitAttemptHandler(
 
             totalCoins:
                 coinsResult.coins,
+
+            rewarded:
+                true,
         },
     };
 }

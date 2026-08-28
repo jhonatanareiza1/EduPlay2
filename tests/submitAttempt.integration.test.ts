@@ -25,6 +25,10 @@ import {
   submitAttemptHandler,
 } from "../src/functions/attempts/submitAttempt";
 
+import {
+  createActivityHandler,
+} from "../src/functions/activities/createActivity";
+
 let testEnv: RulesTestEnvironment;
 
 const PROJECT_ID =
@@ -188,6 +192,7 @@ describe(
                       points:
                         5,
                     },
+
                     {
                       id:
                         "question2",
@@ -801,6 +806,7 @@ describe(
                           text:
                             "Correcta",
                         },
+
                         {
                           id:
                             "option-b",
@@ -1014,6 +1020,526 @@ describe(
 
           coins:
             0,
+        });
+      },
+    );
+
+    it(
+      "crea una actividad con createActivity y permite enviarla con submitAttempt",
+      async () => {
+        const teacherId =
+          "teacher-create-flow-001";
+
+        const studentId =
+          "student-create-flow-001";
+
+        const attemptId =
+          "attempt-create-flow-001";
+
+        await testEnv
+          .withSecurityRulesDisabled(
+            async (context) => {
+              const db =
+                context.firestore();
+
+              await setDoc(
+                doc(
+                  db,
+                  "users",
+                  studentId,
+                ),
+                {
+                  uid:
+                    studentId,
+
+                  role:
+                    "student",
+
+                  name:
+                    "Estudiante integración",
+                },
+              );
+
+              await setDoc(
+                doc(
+                  db,
+                  "students",
+                  studentId,
+                ),
+                {
+                  userId:
+                    studentId,
+                },
+              );
+
+              await setDoc(
+                doc(
+                  db,
+                  "gamificationProfiles",
+                  studentId,
+                ),
+                {
+                  studentId,
+
+                  totalXP:
+                    0,
+
+                  level:
+                    1,
+
+                  coins:
+                    0,
+
+                  currentStreak:
+                    0,
+
+                  bestStreak:
+                    0,
+
+                  subjects: {
+                    mathematics: {
+                      percentage:
+                        0,
+
+                      level:
+                        1,
+
+                      label:
+                        "Básico",
+                    },
+
+                    english: {
+                      percentage:
+                        0,
+
+                      level:
+                        1,
+
+                      label:
+                        "Básico",
+                    },
+
+                    science: {
+                      percentage:
+                        0,
+
+                      level:
+                        1,
+
+                      label:
+                        "Básico",
+                    },
+
+                    history: {
+                      percentage:
+                        0,
+
+                      level:
+                        1,
+
+                      label:
+                        "Básico",
+                    },
+                  },
+
+                  lastActivityAt:
+                    null,
+
+                  createdAt:
+                    new Date(),
+
+                  updatedAt:
+                    new Date(),
+                },
+              );
+            },
+          );
+
+        const created =
+          await createActivityHandler(
+            {
+              title:
+                "Actividad creada por integración",
+
+              description:
+                "Prueba del flujo completo",
+
+              type:
+                "quiz",
+
+              subjectId:
+                "mathematics",
+
+              questions: [
+                {
+                  id:
+                    "question1",
+
+                  type:
+                    "multiple-choice",
+
+                  text:
+                    "¿Cuánto es 2 + 2?",
+
+                  options: [
+                    {
+                      id:
+                        "option-a",
+
+                      text:
+                        "3",
+                    },
+
+                    {
+                      id:
+                        "option-b",
+
+                      text:
+                        "4",
+                    },
+                  ],
+
+                  points:
+                    5,
+
+                  correctAnswer:
+                    "option-b",
+                },
+
+                {
+                  id:
+                    "question2",
+
+                  type:
+                    "multiple-choice",
+
+                  text:
+                    "¿Cuánto es 3 + 3?",
+
+                  options: [
+                    {
+                      id:
+                        "option-a",
+
+                      text:
+                        "6",
+                    },
+
+                    {
+                      id:
+                        "option-b",
+
+                      text:
+                        "7",
+                    },
+                  ],
+
+                  points:
+                    5,
+
+                  correctAnswer:
+                    "option-a",
+                },
+              ],
+
+              passingScore:
+                6,
+
+              isPublished:
+                true,
+            },
+            {
+              uid:
+                teacherId,
+            },
+          );
+
+        expect(
+          created.activityId,
+        ).toBeTruthy();
+
+        expect(
+          created.configId,
+        ).toBeTruthy();
+
+        /*
+         * Verificamos los documentos internos creados
+         * por createActivityHandler.
+         *
+         * Estas lecturas se realizan con las reglas
+         * deshabilitadas porque activityAnswerKeys
+         * contiene las respuestas correctas y no debe
+         * ser accesible directamente por el estudiante.
+         */
+
+        await testEnv
+          .withSecurityRulesDisabled(
+            async (context) => {
+              const db =
+                context.firestore();
+
+              const activitySnap =
+                await getDoc(
+                  doc(
+                    db,
+                    "activities",
+                    created.activityId,
+                  ),
+                );
+
+              expect(
+                activitySnap.exists(),
+              ).toBe(true);
+
+              expect(
+                activitySnap.data(),
+              ).toMatchObject({
+                title:
+                  "Actividad creada por integración",
+
+                description:
+                  "Prueba del flujo completo",
+
+                ownerTeacherId:
+                  teacherId,
+
+                subjectId:
+                  "mathematics",
+
+                configId:
+                  created.configId,
+
+                type:
+                  "quiz",
+
+                isPublished:
+                  true,
+              });
+
+              const configSnap =
+                await getDoc(
+                  doc(
+                    db,
+                    "activityConfigs",
+                    created.configId,
+                  ),
+                );
+
+              expect(
+                configSnap.exists(),
+              ).toBe(true);
+
+              expect(
+                configSnap.data(),
+              ).toMatchObject({
+                activityId:
+                  created.activityId,
+
+                ownerTeacherId:
+                  teacherId,
+
+                passingScore:
+                  6,
+              });
+
+              expect(
+                configSnap.data()?.questions,
+              ).toHaveLength(2);
+
+              const answerKeySnap =
+                await getDoc(
+                  doc(
+                    db,
+                    "activityAnswerKeys",
+                    created.activityId,
+                  ),
+                );
+
+              expect(
+                answerKeySnap.exists(),
+              ).toBe(true);
+
+              expect(
+                answerKeySnap.data(),
+              ).toMatchObject({
+                activityId:
+                  created.activityId,
+
+                ownerTeacherId:
+                  teacherId,
+
+                answers: {
+                  question1:
+                    "option-b",
+
+                  question2:
+                    "option-a",
+                },
+              });
+            },
+          );
+
+        const result =
+          await submitAttemptHandler(
+            {
+              activityId:
+                created.activityId,
+
+              studentId,
+
+              attemptId,
+
+              answers: {
+                question1:
+                  "option-b",
+
+                question2:
+                  "option-a",
+              },
+            },
+            {
+              uid:
+                studentId,
+            },
+          );
+
+        expect(
+          result.success,
+        ).toBe(true);
+
+        expect(
+          result.attemptId,
+        ).toBe(attemptId);
+
+        expect(
+          result.score,
+        ).toBe(10);
+
+        expect(
+          result.totalPoints,
+        ).toBe(10);
+
+        expect(
+          result.correctAnswers,
+        ).toBe(2);
+
+        expect(
+          result.totalQuestions,
+        ).toBe(2);
+
+        expect(
+          result.passed,
+        ).toBe(true);
+
+        expect(
+          result.gamification.xp,
+        ).toBe(20);
+
+        expect(
+          result.gamification.totalXP,
+        ).toBe(20);
+
+        expect(
+          result.gamification.coins,
+        ).toBe(10);
+
+        expect(
+          result.gamification.totalCoins,
+        ).toBe(10);
+
+        const context =
+          testEnv.authenticatedContext(
+            studentId,
+          );
+
+        const attemptSnap =
+          await getDoc(
+            doc(
+              context.firestore(),
+              "attempts",
+              attemptId,
+            ),
+          );
+
+        expect(
+          attemptSnap.exists(),
+        ).toBe(true);
+
+        expect(
+          attemptSnap.data(),
+        ).toMatchObject({
+          studentId,
+
+          activityId:
+            created.activityId,
+
+          answers: {
+            question1:
+              "option-b",
+
+            question2:
+              "option-a",
+          },
+
+          score:
+            10,
+
+          totalPoints:
+            10,
+
+          correctAnswers:
+            2,
+
+          totalQuestions:
+            2,
+
+          passed:
+            true,
+
+          status:
+            "submitted",
+
+          gamification: {
+            scorePercentage:
+              100,
+
+            xp:
+              20,
+
+            coins:
+              10,
+
+            rewarded:
+              true,
+          },
+        });
+
+        const profileSnap =
+          await getDoc(
+            doc(
+              context.firestore(),
+              "gamificationProfiles",
+              studentId,
+            ),
+          );
+
+        expect(
+          profileSnap.exists(),
+        ).toBe(true);
+
+        expect(
+          profileSnap.data(),
+        ).toMatchObject({
+          studentId,
+
+          totalXP:
+            20,
+
+          level:
+            1,
+
+          coins:
+            10,
         });
       },
     );
