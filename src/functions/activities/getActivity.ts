@@ -1,21 +1,22 @@
-import { getApps, initializeApp } from "firebase-admin/app";
-import { getFirestore } from "firebase-admin/firestore";
-import { HttpsError } from "firebase-functions/v2/https";
+import {
+    getApps,
+    initializeApp,
+} from "firebase-admin/app";
 
-process.env.FIRESTORE_EMULATOR_HOST ??= "127.0.0.1:8081";
+import {
+    getFirestore,
+} from "firebase-admin/firestore";
+
+import {
+    HttpsError,
+} from "firebase-functions/v2/https";
+
+process.env.FIRESTORE_EMULATOR_HOST ??=
+    "127.0.0.1:8081";
 
 const projectId =
-    process.env.GCLOUD_PROJECT ?? "eduplay-test";
-
-console.log(
-    "[getActivity] projectId:",
-    projectId,
-);
-
-console.log(
-    "[getActivity] GCLOUD_PROJECT:",
-    process.env.GCLOUD_PROJECT,
-);
+    process.env.GCLOUD_PROJECT ??
+    "eduplay-test";
 
 if (getApps().length === 0) {
     initializeApp({
@@ -62,7 +63,10 @@ export interface ActivityAnswerKeyDocument {
     id: string;
     activityId: string;
     ownerTeacherId: string;
-    answers: Record<string, string | string[]>;
+    answers: Record<
+        string,
+        string | string[]
+    >;
 }
 
 export interface LoadedActivity {
@@ -84,34 +88,19 @@ export async function getActivityForAttempt(
         );
     }
 
-    const db = getFirestore();
+    const db =
+        getFirestore();
 
-    const activityRef = db
-        .collection("activities")
-        .doc(activityId);
+    const normalizedActivityId =
+        activityId.trim();
+
+    const activityRef =
+        db
+            .collection("activities")
+            .doc(normalizedActivityId);
 
     const activitySnap =
         await activityRef.get();
-
-    console.log(
-        "[getActivity] activityId:",
-        activityId,
-    );
-
-    console.log(
-        "[getActivity] projectId:",
-        projectId,
-    );
-
-    console.log(
-        "[getActivity] FIRESTORE_EMULATOR_HOST:",
-        process.env.FIRESTORE_EMULATOR_HOST,
-    );
-
-    console.log(
-        "[getActivity] activity exists:",
-        activitySnap.exists,
-    );
 
     if (!activitySnap.exists) {
         throw new HttpsError(
@@ -121,15 +110,31 @@ export async function getActivityForAttempt(
     }
 
     const activityData =
-        activitySnap.data() as Record<string, unknown>;
+        activitySnap.data() as Record<
+            string,
+            unknown
+        >;
 
     const ownerTeacherId =
         activityData.ownerTeacherId;
 
-    if (typeof ownerTeacherId !== "string") {
+    if (
+        typeof ownerTeacherId !== "string" ||
+        ownerTeacherId.trim() === ""
+    ) {
         throw new HttpsError(
             "failed-precondition",
             "La actividad no tiene un docente propietario válido.",
+        );
+    }
+
+    const isPublished =
+        activityData.isPublished === true;
+
+    if (!isPublished) {
+        throw new HttpsError(
+            "failed-precondition",
+            "La actividad no está publicada.",
         );
     }
 
@@ -146,13 +151,15 @@ export async function getActivityForAttempt(
         );
     }
 
-    const configRef = db
-        .collection("activityConfigs")
-        .doc(configId);
+    const configRef =
+        db
+            .collection("activityConfigs")
+            .doc(configId);
 
-    const answerKeyRef = db
-        .collection("activityAnswerKeys")
-        .doc(activityId);
+    const answerKeyRef =
+        db
+            .collection("activityAnswerKeys")
+            .doc(normalizedActivityId);
 
     const [
         configSnap,
@@ -177,12 +184,21 @@ export async function getActivityForAttempt(
     }
 
     const configData =
-        configSnap.data() as Record<string, unknown>;
+        configSnap.data() as Record<
+            string,
+            unknown
+        >;
 
     const answerKeyData =
-        answerKeySnap.data() as Record<string, unknown>;
+        answerKeySnap.data() as Record<
+            string,
+            unknown
+        >;
 
-    if (configData.activityId !== activityId) {
+    if (
+        configData.activityId !==
+        normalizedActivityId
+    ) {
         throw new HttpsError(
             "failed-precondition",
             "La configuración no pertenece a la actividad.",
@@ -201,7 +217,7 @@ export async function getActivityForAttempt(
 
     if (
         answerKeyData.activityId !==
-        activityId
+        normalizedActivityId
     ) {
         throw new HttpsError(
             "failed-precondition",
@@ -259,55 +275,79 @@ export async function getActivityForAttempt(
 
     return {
         activity: {
-            id: activitySnap.id,
+            id:
+                activitySnap.id,
+
             title:
                 activityData.title as string,
+
             description:
                 activityData.description as
                 string | undefined,
+
             type:
                 activityData.type as
                 string | undefined,
+
             ownerTeacherId,
+
             subjectId:
                 activityData.subjectId as
                 string | undefined,
+
             topicId:
                 activityData.topicId as
                 string | undefined,
+
             configId,
+
             isPublished:
-                activityData.isPublished as
-                boolean | undefined,
+                true,
+
             createdAt:
                 activityData.createdAt,
+
             updatedAt:
                 activityData.updatedAt,
         },
 
         config: {
-            id: configSnap.id,
-            activityId,
+            id:
+                configSnap.id,
+
+            activityId:
+                normalizedActivityId,
+
             ownerTeacherId,
+
             questions,
+
             timeLimitSeconds:
                 configData.timeLimitSeconds as
                 number | undefined,
+
             shuffleQuestions:
                 configData.shuffleQuestions as
                 boolean | undefined,
+
             shuffleOptions:
                 configData.shuffleOptions as
                 boolean | undefined,
+
             passingScore:
                 configData.passingScore as
                 number | undefined,
         },
 
         answerKey: {
-            id: answerKeySnap.id,
-            activityId,
+            id:
+                answerKeySnap.id,
+
+            activityId:
+                normalizedActivityId,
+
             ownerTeacherId,
+
             answers:
                 answers as Record<
                     string,
