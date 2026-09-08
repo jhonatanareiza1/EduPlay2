@@ -255,6 +255,7 @@ describe("getActivityForAttempt", () => {
                                 "teacher-test-001",
                             configId:
                                 "config-inexistente",
+                            isPublished: true,
                         },
                     );
                 },

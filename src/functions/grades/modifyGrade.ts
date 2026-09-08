@@ -1,4 +1,26 @@
+import {
+    getApps,
+    initializeApp,
+} from "firebase-admin/app";
+
+import {
+    getFirestore,
+} from "firebase-admin/firestore";
+
 import { HttpsError } from "firebase-functions/v2/https";
+
+process.env.FIRESTORE_EMULATOR_HOST ??=
+    "127.0.0.1:8081";
+
+const projectId =
+    process.env.GCLOUD_PROJECT
+    ?? "eduplay-test";
+
+if (getApps().length === 0) {
+    initializeApp({
+        projectId,
+    });
+}
 
 export interface ModifyGradeData {
     gradeId: string;
@@ -19,10 +41,10 @@ export interface ModifyGradeResult {
     modifiedBy: string;
 }
 
-export function modifyGradeHandler(
+export async function modifyGradeHandler(
     data: ModifyGradeData,
     auth: ModifyGradeAuth | null,
-): ModifyGradeResult {
+): Promise<ModifyGradeResult> {
     if (!auth) {
         throw new HttpsError(
             "unauthenticated",
@@ -73,11 +95,143 @@ export function modifyGradeHandler(
         );
     }
 
-    return {
-        gradeId: data.gradeId,
-        studentId: data.studentId,
-        grade: data.grade,
-        reason: data.reason,
-        modifiedBy: auth.uid,
-    };
+    const database =
+        getFirestore();
+
+    const gradeReference =
+        database
+            .collection("grades")
+            .doc(data.gradeId);
+
+    const result =
+        await database.runTransaction(
+            async (transaction) => {
+                const gradeSnapshot =
+                    await transaction.get(
+                        gradeReference,
+                    );
+
+                if (!gradeSnapshot.exists) {
+                    throw new HttpsError(
+                        "not-found",
+                        "La calificación no existe.",
+                    );
+                }
+
+                const gradeData =
+                    gradeSnapshot.data();
+
+                if (
+                    gradeData?.studentId !==
+                    data.studentId
+                ) {
+                    throw new HttpsError(
+                        "permission-denied",
+                        "La calificación no pertenece al estudiante indicado.",
+                    );
+                }
+
+                if (
+                    gradeData?.teacherId !==
+                    auth.uid
+                ) {
+                    throw new HttpsError(
+                        "permission-denied",
+                        "No puedes modificar esta calificación.",
+                    );
+                }
+
+                const previousGrade =
+                    typeof gradeData.finalGrade === "number"
+                        ? gradeData.finalGrade
+                        : gradeData.grade;
+
+                const academicBonus =
+                    typeof gradeData.academicBonus === "number"
+                        ? gradeData.academicBonus
+                        : 0;
+
+                const finalGrade =
+                    Math.min(
+                        10,
+                        data.grade +
+                        academicBonus,
+                    );
+
+                const gradeChangeReference =
+                    database
+                        .collection("gradeChanges")
+                        .doc();
+
+                transaction.update(
+                    gradeReference,
+                    {
+                        grade:
+                            finalGrade,
+
+                        baseGrade:
+                            data.grade,
+
+                        finalGrade,
+
+                        updatedAt:
+                            new Date(),
+                    },
+                );
+
+                transaction.create(
+                    gradeChangeReference,
+                    {
+                        gradeId:
+                            data.gradeId,
+
+                        studentId:
+                            data.studentId,
+
+                        changedBy:
+                            auth.uid,
+
+                        previousGrade,
+
+                        newGrade:
+                            finalGrade,
+
+                        type:
+                            "grade",
+
+                        reason:
+                            data.reason,
+
+                        achievementId:
+                            null,
+
+                        bonus:
+                            0,
+
+                        createdAt:
+                            new Date(),
+                    },
+                );
+
+                return {
+                    gradeId:
+                        data.gradeId,
+
+                    studentId:
+                        data.studentId,
+
+                    grade:
+                        finalGrade,
+
+                    reason:
+                        data.reason,
+
+                    modifiedBy:
+                        auth.uid,
+                };
+            },
+        );
+
+    return result;
+
 }

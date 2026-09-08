@@ -51,6 +51,10 @@ import {
 } from "./functions/grades/applyAcademicBonus";
 
 import {
+    createGradeHandler,
+} from "./functions/grades/createGrade";
+
+import {
     createClassSessionHandler,
 } from "./functions/sessions/createClassSession";
 
@@ -255,6 +259,22 @@ export const unlockAchievement = onCall(
 // GRADES
 // ============================================================
 
+export const createGrade = onCall(
+    {
+        cors: ["http://localhost:5173"],
+    },
+    async (request) => {
+        return createGradeHandler(
+            request.data,
+            request.auth
+                ? {
+                    uid: request.auth.uid,
+                }
+                : null,
+        );
+    },
+);
+
 export const modifyGrade = onCall(
     {
         cors: ["http://localhost:5173"],
@@ -433,7 +453,6 @@ export const getActivity = onCall(
             (result) => ({
                 activity:
                     result.activity,
-
                 config:
                     result.config,
             }),
@@ -484,6 +503,8 @@ export const getTeacherActivity = onCall(
                     uid: request.auth.uid,
                 }
                 : null,
+        ).then(
+            (result) => result,
         );
     },
 );

@@ -36,6 +36,10 @@ const database = getFirestore();
 const studentId =
     "student-test-001";
 
+const auth = {
+    uid: studentId,
+};
+
 describe("unlockAchievement", () => {
     beforeEach(async () => {
         await database
@@ -78,51 +82,81 @@ describe("unlockAchievement", () => {
                 createdAt: new Date(),
                 updatedAt: new Date(),
             });
+
+        await database
+            .collection("achievements")
+            .doc("achievement-test-001")
+            .set({
+                name: "Logro de prueba 1",
+                description:
+                    "Logro utilizado en pruebas.",
+            });
+
+        await database
+            .collection("achievements")
+            .doc("achievement-test-002")
+            .set({
+                name: "Logro de prueba 2",
+                description:
+                    "Logro utilizado en pruebas.",
+            });
     });
 
     it("permite desbloquear un logro", async () => {
         const result =
-            await unlockAchievementHandler({
-                studentId,
-                achievementId:
-                    "achievement-test-001",
-            });
+            await unlockAchievementHandler(
+                {
+                    studentId,
+                    achievementId:
+                        "achievement-test-001",
+                },
+                auth,
+            );
 
         expect(result).toEqual({
             studentId,
             achievementId:
                 "achievement-test-001",
-            unlocked: true,
+            unlockedBy:
+                studentId,
         });
     });
 
     it("permite desbloquear el mismo logro sin duplicarlo", async () => {
         const first =
-            await unlockAchievementHandler({
-                studentId,
-                achievementId:
-                    "achievement-test-002",
-            });
+            await unlockAchievementHandler(
+                {
+                    studentId,
+                    achievementId:
+                        "achievement-test-002",
+                },
+                auth,
+            );
 
         const second =
-            await unlockAchievementHandler({
-                studentId,
-                achievementId:
-                    "achievement-test-002",
-            });
+            await unlockAchievementHandler(
+                {
+                    studentId,
+                    achievementId:
+                        "achievement-test-002",
+                },
+                auth,
+            );
 
         expect(first).toEqual({
             studentId,
             achievementId:
                 "achievement-test-002",
-            unlocked: true,
+            unlockedBy:
+                studentId,
         });
 
         expect(second).toEqual({
             studentId,
             achievementId:
                 "achievement-test-002",
-            unlocked: true,
+            unlockedBy:
+                studentId,
         });
     });
 

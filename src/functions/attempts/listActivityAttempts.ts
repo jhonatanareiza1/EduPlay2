@@ -12,6 +12,15 @@ interface AuthContext {
     uid: string;
 }
 
+interface ActivityAttemptAnswerResult {
+    questionId: string;
+    answer: string | string[];
+    answerText?: string | string[];
+    isCorrect: boolean;
+    pointsEarned: number;
+    pointsAvailable: number;
+}
+
 interface ActivityAttempt {
     attemptId: string;
     studentId: string;
@@ -23,6 +32,7 @@ interface ActivityAttempt {
     totalQuestions: number;
     passed: boolean;
     status: string;
+    answerResults: ActivityAttemptAnswerResult[];
     gamification?: {
         scorePercentage?: number;
         xp?: number;
@@ -61,11 +71,112 @@ function serializeTimestamp(
     return value;
 }
 
+function serializeAnswerResults(
+    value: unknown,
+): ActivityAttemptAnswerResult[] {
+    console.log(
+        '[listActivityAttempts] serializeAnswerResults input:',
+        JSON.stringify(value),
+    );
+
+    console.log(
+        '[listActivityAttempts] serializeAnswerResults isArray:',
+        Array.isArray(value),
+    );
+
+    if (!Array.isArray(value)) {
+        return [];
+    }
+
+    const serialized =
+        value
+            .filter(
+                (result): result is Record<string, unknown> =>
+                    !!result &&
+                    typeof result === 'object' &&
+                    !Array.isArray(result),
+            )
+            .filter(
+                (result) =>
+                    typeof result.questionId === 'string',
+            )
+            .map(
+                (result): ActivityAttemptAnswerResult => {
+                    const answer =
+                        typeof result.answer === 'string'
+                            ? result.answer
+                            : Array.isArray(result.answer)
+                                ? result.answer.filter(
+                                    (
+                                        item,
+                                    ): item is string =>
+                                        typeof item === 'string',
+                                )
+                                : [];
+
+                    const answerText =
+                        typeof result.answerText === 'string'
+                            ? result.answerText
+                            : Array.isArray(result.answerText)
+                                ? result.answerText.filter(
+                                    (
+                                        item,
+                                    ): item is string =>
+                                        typeof item === 'string',
+                                )
+                                : undefined;
+
+                    return {
+                        questionId:
+                            result.questionId as string,
+                        answer,
+                        ...(answerText !== undefined
+                            ? {
+                                answerText,
+                            }
+                            : {}),
+                        isCorrect:
+                            result.isCorrect === true,
+                        pointsEarned:
+                            typeof result.pointsEarned === 'number'
+                                ? result.pointsEarned
+                                : 0,
+                        pointsAvailable:
+                            typeof result.pointsAvailable === 'number'
+                                ? result.pointsAvailable
+                                : 0,
+                    };
+                },
+            );
+
+    console.log(
+        '[listActivityAttempts] serializeAnswerResults output:',
+        JSON.stringify(serialized),
+    );
+
+    return serialized;
+}
+
 function serializeAttempt(
     document: FirebaseFirestore.QueryDocumentSnapshot,
 ): ActivityAttempt {
     const data =
         document.data();
+
+    console.log(
+        '[listActivityAttempts] attempt:',
+        document.id,
+    );
+
+    console.log(
+        '[listActivityAttempts] raw attempt data:',
+        JSON.stringify(data),
+    );
+
+    console.log(
+        '[listActivityAttempts] raw answerResults:',
+        JSON.stringify(data.answerResults),
+    );
 
     const gamification =
         data.gamification &&
@@ -76,52 +187,46 @@ function serializeAttempt(
     return {
         attemptId:
             document.id,
-
         studentId:
             typeof data.studentId === 'string'
                 ? data.studentId
                 : '',
-
         activityId:
             typeof data.activityId === 'string'
                 ? data.activityId
                 : '',
-
         ...(typeof data.groupId === 'string'
             ? {
                 groupId:
                     data.groupId,
             }
             : {}),
-
         score:
             typeof data.score === 'number'
                 ? data.score
                 : 0,
-
         totalPoints:
             typeof data.totalPoints === 'number'
                 ? data.totalPoints
                 : 0,
-
         correctAnswers:
             typeof data.correctAnswers === 'number'
                 ? data.correctAnswers
                 : 0,
-
         totalQuestions:
             typeof data.totalQuestions === 'number'
                 ? data.totalQuestions
                 : 0,
-
         passed:
             data.passed === true,
-
         status:
             typeof data.status === 'string'
                 ? data.status
                 : 'unknown',
-
+        answerResults:
+            serializeAnswerResults(
+                data.answerResults,
+            ),
         ...(gamification
             ? {
                 gamification: {
@@ -132,7 +237,6 @@ function serializeAttempt(
                                 gamification.scorePercentage,
                         }
                         : {}),
-
                     ...(typeof gamification.xp ===
                         'number'
                         ? {
@@ -140,7 +244,6 @@ function serializeAttempt(
                                 gamification.xp,
                         }
                         : {}),
-
                     ...(typeof gamification.coins ===
                         'number'
                         ? {
@@ -148,7 +251,6 @@ function serializeAttempt(
                                 gamification.coins,
                         }
                         : {}),
-
                     ...(typeof gamification.totalXP ===
                         'number'
                         ? {
@@ -156,7 +258,6 @@ function serializeAttempt(
                                 gamification.totalXP,
                         }
                         : {}),
-
                     ...(typeof gamification.totalCoins ===
                         'number'
                         ? {
@@ -164,7 +265,6 @@ function serializeAttempt(
                                 gamification.totalCoins,
                         }
                         : {}),
-
                     ...(typeof gamification.rewarded ===
                         'boolean'
                         ? {
@@ -175,7 +275,6 @@ function serializeAttempt(
                 },
             }
             : {}),
-
         ...(data.createdAt
             ? {
                 createdAt:
@@ -191,6 +290,15 @@ export async function listActivityAttemptsHandler(
     activityId: string,
     auth: AuthContext | null,
 ): Promise<ListActivityAttemptsResult> {
+    console.log(
+        '[listActivityAttempts] START',
+        JSON.stringify({
+            activityId,
+            authUid:
+                auth?.uid ?? null,
+        }),
+    );
+
     if (!auth) {
         throw new HttpsError(
             'unauthenticated',
@@ -216,6 +324,15 @@ export async function listActivityAttemptsHandler(
     const activitySnapshot =
         await activityRef.get();
 
+    console.log(
+        '[listActivityAttempts] activity snapshot:',
+        JSON.stringify({
+            activityId,
+            exists:
+                activitySnapshot.exists,
+        }),
+    );
+
     if (!activitySnapshot.exists) {
         throw new HttpsError(
             'not-found',
@@ -239,61 +356,93 @@ export async function listActivityAttemptsHandler(
             ? activityData.ownerTeacherId
             : '';
 
-    /*
-     * DOCENTE:
-     * Puede consultar todos los intentos
-     * de una actividad que le pertenece.
-     */
-    if (
-        ownerTeacherId ===
-        auth.uid
-    ) {
-        const snapshot =
-            await db
-                .collection('attempts')
-                .where(
-                    'activityId',
-                    '==',
-                    activityId,
-                )
-                .get();
+    console.log(
+        '[listActivityAttempts] activity data:',
+        JSON.stringify({
+            activityId,
+            ownerTeacherId,
+            subjectId:
+                activityData.subjectId ?? null,
+            title:
+                activityData.title ?? null,
+        }),
+    );
 
-        const attempts =
-            snapshot.docs
-                .map(serializeAttempt)
-                .sort(
-                    (
-                        first,
-                        second,
-                    ) => {
-                        const firstDate =
-                            typeof first.createdAt ===
-                                'string'
-                                ? first.createdAt
-                                : '';
+    if (!ownerTeacherId) {
+        throw new HttpsError(
+            'failed-precondition',
+            'La actividad no tiene un docente propietario válido.',
+        );
+    }
 
-                        const secondDate =
-                            typeof second.createdAt ===
-                                'string'
-                                ? second.createdAt
-                                : '';
+    const userSnapshot =
+        await db
+            .collection('users')
+            .doc(auth.uid)
+            .get();
 
-                        return secondDate.localeCompare(
-                            firstDate,
-                        );
-                    },
-                );
+    console.log(
+        '[listActivityAttempts] user snapshot:',
+        JSON.stringify({
+            uid: auth.uid,
+            exists:
+                userSnapshot.exists,
+        }),
+    );
 
-        return {
-            attempts,
-        };
+    if (!userSnapshot.exists) {
+        throw new HttpsError(
+            'not-found',
+            'El usuario no existe.',
+        );
+    }
+
+    const userData =
+        userSnapshot.data();
+
+    if (!userData) {
+        throw new HttpsError(
+            'not-found',
+            'No se encontraron los datos del usuario.',
+        );
+    }
+
+    const role =
+        typeof userData.role === 'string'
+            ? userData.role
+            : '';
+
+    const isTeacher =
+        role === 'teacher';
+
+    const isStudent =
+        role === 'student';
+
+    console.log(
+        '[listActivityAttempts] authorization:',
+        JSON.stringify({
+            uid: auth.uid,
+            role,
+            isTeacher,
+            isStudent,
+            ownerTeacherId,
+        }),
+    );
+
+    if (!isTeacher && !isStudent) {
+        throw new HttpsError(
+            'permission-denied',
+            'No tienes permiso para consultar estos intentos.',
+        );
     }
 
     /*
-     * ESTUDIANTE:
-     * Solo puede consultar sus propios intentos.
+     * Diagnóstico:
+     * primero consultamos todos los intentos de la actividad,
+     * sin filtrar por estudiante, para comprobar que la actividad
+     * realmente tiene documentos en attempts.
      */
-    const studentSnapshot =
+    const activityAttemptsSnapshot =
         await db
             .collection('attempts')
             .where(
@@ -301,45 +450,144 @@ export async function listActivityAttemptsHandler(
                 '==',
                 activityId,
             )
+            .get();
+
+    console.log(
+        '[listActivityAttempts] attempts for activity:',
+        JSON.stringify({
+            activityId,
+            count:
+                activityAttemptsSnapshot.size,
+            documents:
+                activityAttemptsSnapshot.docs.map(
+                    (document) => {
+                        const data =
+                            document.data();
+
+                        return {
+                            attemptId:
+                                document.id,
+                            studentId:
+                                data.studentId ?? null,
+                            activityId:
+                                data.activityId ?? null,
+                            status:
+                                data.status ?? null,
+                        };
+                    },
+                ),
+        }),
+    );
+
+    let query:
+        FirebaseFirestore.Query<FirebaseFirestore.DocumentData> =
+        db
+            .collection('attempts')
             .where(
+                'activityId',
+                '==',
+                activityId,
+            );
+
+    if (isStudent) {
+        console.log(
+            '[listActivityAttempts] applying student filter:',
+            JSON.stringify({
+                studentId:
+                    auth.uid,
+            }),
+        );
+
+        query =
+            query.where(
                 'studentId',
                 '==',
                 auth.uid,
-            )
-            .get();
+            );
+    }
 
-    const studentAttempts =
-        studentSnapshot.docs
+    if (isTeacher) {
+        if (ownerTeacherId !== auth.uid) {
+            throw new HttpsError(
+                'permission-denied',
+                'Solo el docente propietario puede consultar estos intentos.',
+            );
+        }
+    }
+
+    const snapshot =
+        await query.get();
+
+    console.log(
+        '[listActivityAttempts] filtered query result:',
+        JSON.stringify({
+            activityId,
+            authUid:
+                auth.uid,
+            role,
+            count:
+                snapshot.size,
+            documents:
+                snapshot.docs.map(
+                    (document) => {
+                        const data =
+                            document.data();
+
+                        return {
+                            attemptId:
+                                document.id,
+                            studentId:
+                                data.studentId ?? null,
+                            activityId:
+                                data.activityId ?? null,
+                        };
+                    },
+                ),
+        }),
+    );
+
+    const attempts =
+        snapshot.docs
             .map(serializeAttempt)
             .sort(
-                (
-                    first,
-                    second,
-                ) => {
-                    const firstDate =
-                        typeof first.createdAt ===
-                            'string'
-                            ? first.createdAt
-                            : '';
+                (a, b) => {
+                    const dateA =
+                        typeof a.createdAt === 'string'
+                            ? new Date(
+                                a.createdAt,
+                            ).getTime()
+                            : 0;
 
-                    const secondDate =
-                        typeof second.createdAt ===
-                            'string'
-                            ? second.createdAt
-                            : '';
+                    const dateB =
+                        typeof b.createdAt === 'string'
+                            ? new Date(
+                                b.createdAt,
+                            ).getTime()
+                            : 0;
 
-                    return secondDate.localeCompare(
-                        firstDate,
-                    );
+                    return dateB - dateA;
                 },
             );
 
-    /*
-     * Si no hay intentos propios, devuelve []
-     * y nunca expone intentos de otros estudiantes.
-     */
+    console.log(
+        '[listActivityAttempts] final attempts:',
+        JSON.stringify(
+            attempts.map((attempt) => ({
+                attemptId:
+                    attempt.attemptId,
+                studentId:
+                    attempt.studentId,
+                activityId:
+                    attempt.activityId,
+                answerResults:
+                    attempt.answerResults,
+                answerResultsLength:
+                    attempt.answerResults.length,
+            })),
+        ),
+    );
+
     return {
-        attempts:
-            studentAttempts,
+        attempts,
     };
 }

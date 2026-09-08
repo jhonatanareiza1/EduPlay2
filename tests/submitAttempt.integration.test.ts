@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+
 import { resolve } from "node:path";
 
 import {
@@ -180,6 +181,7 @@ describe(
                           text:
                             "Correcta",
                         },
+
                         {
                           id:
                             "option-b",
@@ -211,6 +213,7 @@ describe(
                           text:
                             "Incorrecta",
                         },
+
                         {
                           id:
                             "option-b",
@@ -330,6 +333,36 @@ describe(
 
                   updatedAt:
                     new Date(),
+                },
+              );
+
+              await setDoc(
+                doc(
+                  db,
+                  "achievements",
+                  "first-victory",
+                ),
+                {
+                  name:
+                    "Primera victoria",
+
+                  description:
+                    "Completar una actividad con éxito.",
+                },
+              );
+
+              await setDoc(
+                doc(
+                  db,
+                  "achievements",
+                  "perfect-score",
+                ),
+                {
+                  name:
+                    "Puntuación perfecta",
+
+                  description:
+                    "Obtener una puntuación perfecta.",
                 },
               );
             },
@@ -1150,6 +1183,36 @@ describe(
 
                   updatedAt:
                     new Date(),
+                },
+              );
+
+              await setDoc(
+                doc(
+                  db,
+                  "achievements",
+                  "first-victory",
+                ),
+                {
+                  name:
+                    "Primera victoria",
+
+                  description:
+                    "Completar una actividad con éxito.",
+                },
+              );
+
+              await setDoc(
+                doc(
+                  db,
+                  "achievements",
+                  "perfect-score",
+                ),
+                {
+                  name:
+                    "Puntuación perfecta",
+
+                  description:
+                    "Obtener una puntuación perfecta.",
                 },
               );
             },

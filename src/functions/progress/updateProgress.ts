@@ -45,7 +45,6 @@ export interface UpdateProgressResult {
     totalPoints: number;
     percentage: number;
     passed: boolean;
-    counted: boolean;
 }
 
 interface SubjectProgressData {
@@ -371,8 +370,6 @@ export async function updateProgressHandler(
     const currentDate =
         new Date();
 
-    let counted = false;
-
     await database.runTransaction(
         async (transaction) => {
             const snapshot =
@@ -384,28 +381,6 @@ export async function updateProgressHandler(
                 snapshot.exists
                     ? snapshot.data() ?? {}
                     : {};
-
-            /*
-             * =========================================
-             * SOLO LAS ACTIVIDADES APROBADAS CUENTAN
-             * =========================================
-             *
-             * Un intento fallido NO modifica progreso.
-             */
-
-            if (!data.passed) {
-                counted = false;
-                return;
-            }
-
-            /*
-             * =========================================
-             * ACTIVIDADES YA APROBADAS
-             * =========================================
-             *
-             * Una actividad aprobada anteriormente
-             * nunca vuelve a contar ni genera recompensa.
-             */
 
             const existingPassedActivityIds =
                 Array.isArray(
@@ -419,32 +394,6 @@ export async function updateProgressHandler(
                     )
                     : [];
 
-            if (
-                existingPassedActivityIds.includes(
-                    data.activityId,
-                )
-            ) {
-                counted = false;
-                return;
-            }
-
-            counted = true;
-
-            const passedActivityIds =
-                [
-                    ...existingPassedActivityIds,
-                    data.activityId,
-                ];
-
-            /*
-             * =========================================
-             * ACTIVIDADES COMPLETADAS
-             * =========================================
-             *
-             * Como solamente registramos aquí actividades
-             * aprobadas, cada actividad aparece una sola vez.
-             */
-
             const existingCompletedActivityIds =
                 Array.isArray(
                     current.completedActivityIds,
@@ -457,21 +406,32 @@ export async function updateProgressHandler(
                     )
                     : [];
 
-            const completedActivityIds =
+            const activityAlreadyCompleted =
                 existingCompletedActivityIds.includes(
                     data.activityId,
-                )
+                );
+
+            const activityAlreadyPassed =
+                existingPassedActivityIds.includes(
+                    data.activityId,
+                );
+
+            const completedActivityIds =
+                activityAlreadyCompleted
                     ? existingCompletedActivityIds
                     : [
                         ...existingCompletedActivityIds,
                         data.activityId,
                     ];
 
-            /*
-             * =========================================
-             * PROGRESO GLOBAL
-             * =========================================
-             */
+            const passedActivityIds =
+                data.passed &&
+                    !activityAlreadyPassed
+                    ? [
+                        ...existingPassedActivityIds,
+                        data.activityId,
+                    ]
+                    : existingPassedActivityIds;
 
             const currentGlobal =
                 normalizeGlobalProgress(
@@ -481,24 +441,35 @@ export async function updateProgressHandler(
             const newActivitiesCompleted =
                 currentGlobal.activitiesCompleted +
                 (
-                    existingCompletedActivityIds.includes(
-                        data.activityId,
-                    )
+                    activityAlreadyCompleted
                         ? 0
                         : 1
                 );
 
             const newPassedActivities =
                 currentGlobal.passedActivities +
-                1;
+                (
+                    data.passed &&
+                        !activityAlreadyPassed
+                        ? 1
+                        : 0
+                );
 
             const newTotalScore =
                 currentGlobal.totalScore +
-                data.score;
+                (
+                    activityAlreadyCompleted
+                        ? 0
+                        : data.score
+                );
 
             const newTotalPoints =
                 currentGlobal.totalPoints +
-                data.totalPoints;
+                (
+                    activityAlreadyCompleted
+                        ? 0
+                        : data.totalPoints
+                );
 
             const newAveragePercentage =
                 newTotalPoints > 0
@@ -509,12 +480,6 @@ export async function updateProgressHandler(
                         ) * 100,
                     )
                     : 0;
-
-            /*
-             * =========================================
-             * PROGRESO POR MATERIA
-             * =========================================
-             */
 
             const currentSubjects =
                 current.subjects &&
@@ -557,24 +522,35 @@ export async function updateProgressHandler(
             const newSubjectActivitiesCompleted =
                 currentSubject.activitiesCompleted +
                 (
-                    existingCompletedActivityIds.includes(
-                        data.activityId,
-                    )
+                    activityAlreadyCompleted
                         ? 0
                         : 1
                 );
 
             const newSubjectPassedActivities =
                 currentSubject.passedActivities +
-                1;
+                (
+                    data.passed &&
+                        !activityAlreadyPassed
+                        ? 1
+                        : 0
+                );
 
             const newSubjectTotalScore =
                 currentSubject.totalScore +
-                data.score;
+                (
+                    activityAlreadyCompleted
+                        ? 0
+                        : data.score
+                );
 
             const newSubjectTotalPoints =
                 currentSubject.totalPoints +
-                data.totalPoints;
+                (
+                    activityAlreadyCompleted
+                        ? 0
+                        : data.totalPoints
+                );
 
             const newSubjectPercentage =
                 newSubjectTotalPoints > 0
@@ -614,12 +590,6 @@ export async function updateProgressHandler(
                 lastPassed:
                     data.passed,
             };
-
-            /*
-             * =========================================
-             * DOCUMENTO FINAL
-             * =========================================
-             */
 
             const progressData = {
                 studentId:
@@ -703,7 +673,5 @@ export async function updateProgressHandler(
 
         passed:
             data.passed,
-
-        counted,
     };
 }

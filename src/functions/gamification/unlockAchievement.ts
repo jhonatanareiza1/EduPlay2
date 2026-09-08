@@ -1,12 +1,11 @@
+
 import {
     getApps,
     initializeApp,
 } from "firebase-admin/app";
-
 import {
     getFirestore,
 } from "firebase-admin/firestore";
-
 import {
     HttpsError,
 } from "firebase-functions/v2/https";
@@ -29,15 +28,27 @@ export interface UnlockAchievementData {
     achievementId: string;
 }
 
+export interface UnlockAchievementAuth {
+    uid: string;
+}
+
 export interface UnlockAchievementResult {
     studentId: string;
     achievementId: string;
-    unlocked: true;
+    unlockedBy: string;
 }
 
 export async function unlockAchievementHandler(
     data: UnlockAchievementData,
+    auth: UnlockAchievementAuth | null,
 ): Promise<UnlockAchievementResult> {
+    if (!auth) {
+        throw new HttpsError(
+            "unauthenticated",
+            "Debes estar autenticado.",
+        );
+    }
+
     if (
         !data ||
         typeof data.studentId !== "string" ||
@@ -59,32 +70,39 @@ export async function unlockAchievementHandler(
         );
     }
 
-    const database = getFirestore();
-
-    const profileReference = database
-        .collection("gamificationProfiles")
-        .doc(data.studentId);
-
-    const profileSnapshot =
-        await profileReference.get();
-
-    if (!profileSnapshot.exists) {
+    if (auth.uid !== data.studentId) {
         throw new HttpsError(
-            "not-found",
-            "El perfil de gamificación no existe.",
+            "permission-denied",
+            "No puedes desbloquear un logro para otro estudiante.",
         );
     }
 
-    const achievementReference =
-        profileReference
-            .collection("achievements")
-            .doc(data.achievementId);
+    const database = getFirestore();
+
+    const achievementReference = database
+        .collection("achievements")
+        .doc(data.achievementId);
 
     const achievementSnapshot =
         await achievementReference.get();
 
     if (!achievementSnapshot.exists) {
-        await achievementReference.create({
+        throw new HttpsError(
+            "not-found",
+            "El logro no existe.",
+        );
+    }
+
+    const studentAchievementReference = database
+        .collection("studentAchievements")
+        .doc(`${data.studentId}_${data.achievementId}`);
+
+    const studentAchievementSnapshot =
+        await studentAchievementReference.get();
+
+    if (!studentAchievementSnapshot.exists) {
+        await studentAchievementReference.create({
+            studentId: data.studentId,
             achievementId: data.achievementId,
             unlockedAt: new Date(),
         });
@@ -93,6 +111,6 @@ export async function unlockAchievementHandler(
     return {
         studentId: data.studentId,
         achievementId: data.achievementId,
-        unlocked: true,
+        unlockedBy: auth.uid,
     };
 }

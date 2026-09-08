@@ -79,6 +79,10 @@ export async function awardCoinsHandler(
         .collection("gamificationProfiles")
         .doc(data.studentId);
 
+    const transactionReference = database
+        .collection("gamificationTransactions")
+        .doc();
+
     const result = await database.runTransaction(
         async (transaction) => {
             const profileSnapshot =
@@ -107,6 +111,18 @@ export async function awardCoinsHandler(
                 {
                     coins: FieldValue.increment(data.amount),
                     updatedAt: new Date(),
+                },
+            );
+
+            transaction.set(
+                transactionReference,
+                {
+                    studentId: data.studentId,
+                    type: "coins",
+                    amount: data.amount,
+                    reason: data.reason,
+                    balanceAfter: newCoins,
+                    createdAt: new Date(),
                 },
             );
 

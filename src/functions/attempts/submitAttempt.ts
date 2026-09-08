@@ -31,6 +31,10 @@ import {
     updateProgressHandler,
 } from "../progress/updateProgress";
 
+import {
+    evaluateAchievementsHandler,
+} from "../achievements/evaluateAchievements";
+
 process.env.FIRESTORE_EMULATOR_HOST ??=
     "127.0.0.1:8081";
 
@@ -89,6 +93,86 @@ function calculateGamificationReward(
         xp: 5,
         coins: 2,
     };
+}
+
+function getAnswerText(
+    answer: string | string[],
+    options: Array<{
+        id: string;
+        text: string;
+    }> | undefined,
+): string | string[] {
+    if (!options || options.length === 0) {
+        return answer;
+    }
+
+    const getOptionText = (
+        optionId: string,
+    ): string => {
+        const option =
+            options.find(
+                (item) =>
+                    item.id === optionId,
+            );
+
+        return option?.text ?? optionId;
+    };
+
+    if (Array.isArray(answer)) {
+        return answer.map(
+            getOptionText,
+        );
+    }
+
+    return getOptionText(answer);
+}
+
+function enrichAnswerResults(
+    answers: Array<{
+        questionId: string;
+        answer: string | string[];
+        isCorrect: boolean;
+        pointsEarned: number;
+        pointsAvailable: number;
+    }>,
+    questions: Array<{
+        id: string;
+        type: string;
+        text: string;
+        options?: Array<{
+            id: string;
+            text: string;
+        }>;
+        points?: number;
+        explanation?: string;
+    }>,
+): Array<{
+    questionId: string;
+    answer: string | string[];
+    answerText: string | string[];
+    isCorrect: boolean;
+    pointsEarned: number;
+    pointsAvailable: number;
+}> {
+    return answers.map(
+        (answerResult) => {
+            const question =
+                questions.find(
+                    (item) =>
+                        item.id ===
+                        answerResult.questionId,
+                );
+
+            return {
+                ...answerResult,
+                answerText:
+                    getAnswerText(
+                        answerResult.answer,
+                        question?.options,
+                    ),
+            };
+        },
+    );
 }
 
 export async function submitAttemptHandler(
@@ -191,17 +275,19 @@ export async function submitAttemptHandler(
     const score =
         calculateScoreHandler({
             activityId,
-
             answers,
-
             answerKey:
                 answerKey.answers,
-
             pointsByQuestion,
-
             passingScore:
                 config.passingScore,
         });
+
+    const answerResults =
+        enrichAnswerResults(
+            score.answers,
+            config.questions,
+        );
 
     const scorePercentage =
         score.totalPoints > 0
@@ -220,7 +306,6 @@ export async function submitAttemptHandler(
      * El attemptId funciona como identificador
      * idempotente del intento.
      */
-
     const attemptReference =
         attemptId
             ? db
@@ -235,7 +320,6 @@ export async function submitAttemptHandler(
      * COMPROBACIÓN DE ATTEMPT EXISTENTE
      * =========================================
      */
-
     const existingAttemptSnapshot =
         await attemptReference.get();
 
@@ -258,60 +342,44 @@ export async function submitAttemptHandler(
 
         return {
             success: true,
-
             attemptId:
                 attemptReference.id,
-
             activity: {
                 id:
                     activity.id,
-
                 title:
                     activity.title,
-
                 subjectId,
             },
-
             score:
                 existingData.score,
-
             totalPoints:
                 existingData.totalPoints,
-
             correctAnswers:
                 existingData.correctAnswers,
-
             totalQuestions:
                 existingData.totalQuestions,
-
             passed:
                 existingData.passed,
-
             gamification: {
                 scorePercentage:
                     existingGamification.scorePercentage
                     ?? scorePercentage,
-
                 xp:
                     existingGamification.xp
                     ?? 0,
-
                 totalXP:
                     existingGamification.totalXP
                     ?? 0,
-
                 level:
                     existingGamification.level
                     ?? 1,
-
                 coins:
                     existingGamification.coins
                     ?? 0,
-
                 totalCoins:
                     existingGamification.totalCoins
                     ?? 0,
-
                 rewarded:
                     existingGamification.rewarded
                     ?? false,
@@ -324,60 +392,41 @@ export async function submitAttemptHandler(
      * CREAR ATTEMPT
      * =========================================
      */
-
     await attemptReference.create({
         studentId,
-
         activityId,
-
         ...(groupId
             ? {
                 groupId,
             }
             : {}),
-
         answers,
-
         score:
             score.score,
-
         totalPoints:
             score.totalPoints,
-
         correctAnswers:
             score.correctAnswers,
-
         totalQuestions:
             score.totalQuestions,
-
         passed:
             score.passed,
-
-        answerResults:
-            score.answers,
-
+        answerResults,
         status:
             "submitted",
-
         gamification: {
             scorePercentage,
-
             xp:
                 0,
-
             coins:
                 0,
-
             totalXP:
                 0,
-
             totalCoins:
                 0,
-
             rewarded:
                 false,
         },
-
         createdAt:
             new Date(),
     });
@@ -387,135 +436,34 @@ export async function submitAttemptHandler(
      * ACTUALIZAR PROGRESO
      * =========================================
      */
-
-    const progressResult =
-        await updateProgressHandler(
-            {
-                studentId,
-
-                activityId,
-
-                subjectId,
-
-                score:
-                    score.score,
-
-                totalPoints:
-                    score.totalPoints,
-
-                passed:
-                    score.passed,
-            },
-            {
-                uid:
-                    studentId,
-            },
-        );
-
-    /*
-     * =========================================
-     * ACTIVIDAD YA CONTABILIZADA
-     * =========================================
-     *
-     * El intento se conserva.
-     *
-     * Pero NO:
-     *
-     * - suma progreso nuevamente
-     * - entrega XP nuevamente
-     * - entrega EduCoins nuevamente
-     */
-
-    if (!progressResult.counted) {
-        await attemptReference.update({
-            gamification: {
-                scorePercentage,
-
-                xp:
-                    0,
-
-                coins:
-                    0,
-
-                totalXP:
-                    0,
-
-                totalCoins:
-                    0,
-
-                rewarded:
-                    false,
-            },
-        });
-
-        return {
-            success: true,
-
-            attemptId:
-                attemptReference.id,
-
-            activity: {
-                id:
-                    activity.id,
-
-                title:
-                    activity.title,
-
-                subjectId,
-            },
-
+    await updateProgressHandler(
+        {
+            studentId,
+            activityId,
+            subjectId,
             score:
                 score.score,
-
             totalPoints:
                 score.totalPoints,
-
-            correctAnswers:
-                score.correctAnswers,
-
-            totalQuestions:
-                score.totalQuestions,
-
             passed:
                 score.passed,
-
-            gamification: {
-                scorePercentage,
-
-                xp:
-                    0,
-
-                totalXP:
-                    0,
-
-                level:
-                    1,
-
-                coins:
-                    0,
-
-                totalCoins:
-                    0,
-
-                rewarded:
-                    false,
-            },
-        };
-    }
+        },
+        {
+            uid:
+                studentId,
+        },
+    );
 
     /*
      * =========================================
      * OTORGAR XP
      * =========================================
      */
-
     const xpResult =
         await awardXPHandler({
             studentId,
-
             amount:
                 reward.xp,
-
             reason:
                 `Actividad completada: ${activity.title}`,
         });
@@ -525,43 +473,73 @@ export async function submitAttemptHandler(
      * OTORGAR EDUCOINS
      * =========================================
      */
-
     const coinsResult =
         await awardCoinsHandler({
             studentId,
-
             amount:
                 reward.coins,
-
             reason:
                 `Actividad completada: ${activity.title}`,
         });
 
     /*
      * =========================================
+     * OBTENER ACTIVIDADES COMPLETADAS
+     * =========================================
+     */
+    const progressSnapshot =
+        await db
+            .collection("progress")
+            .doc(studentId)
+            .get();
+
+    const progressData =
+        progressSnapshot.data() ?? {};
+
+    const activitiesCompleted =
+        typeof progressData.activitiesCompleted === "number"
+            ? progressData.activitiesCompleted
+            : 0;
+
+    /*
+     * =========================================
+     * EVALUAR ACHIEVEMENTS
+     * =========================================
+     */
+    await evaluateAchievementsHandler(
+        {
+            studentId,
+            passed:
+                score.passed,
+            scorePercentage,
+            activitiesCompleted,
+            totalXP:
+                xpResult.totalXP,
+        },
+        {
+            uid:
+                studentId,
+        },
+    );
+
+    /*
+     * =========================================
      * GUARDAR GAMIFICACIÓN FINAL
      * =========================================
      */
-
     await attemptReference.update({
         gamification: {
             scorePercentage,
-
             xp:
                 reward.xp,
-
             totalXP:
                 xpResult.totalXP,
-
             level:
                 xpResult.level,
-
             coins:
                 reward.coins,
-
             totalCoins:
                 coinsResult.coins,
-
             rewarded:
                 true,
         },
@@ -572,56 +550,39 @@ export async function submitAttemptHandler(
      * RESPUESTA FINAL
      * =========================================
      */
-
     return {
         success: true,
-
         attemptId:
             attemptReference.id,
-
         activity: {
             id:
                 activity.id,
-
             title:
                 activity.title,
-
             subjectId,
         },
-
         score:
             score.score,
-
         totalPoints:
             score.totalPoints,
-
         correctAnswers:
             score.correctAnswers,
-
         totalQuestions:
             score.totalQuestions,
-
         passed:
             score.passed,
-
         gamification: {
             scorePercentage,
-
             xp:
                 reward.xp,
-
             totalXP:
                 xpResult.totalXP,
-
             level:
                 xpResult.level,
-
             coins:
                 reward.coins,
-
             totalCoins:
                 coinsResult.coins,
-
             rewarded:
                 true,
         },
