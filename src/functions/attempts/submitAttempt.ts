@@ -35,6 +35,10 @@ import {
     evaluateAchievementsHandler,
 } from "../achievements/evaluateAchievements";
 
+import {
+    completeActivityAssignmentHandler,
+} from "../assignments/completeActivityAssignment";
+
 process.env.FIRESTORE_EMULATOR_HOST ??=
     "127.0.0.1:8081";
 
@@ -433,6 +437,94 @@ export async function submitAttemptHandler(
 
     /*
      * =========================================
+     * COMPLETAR ASIGNACIONES
+     * =========================================
+     */
+    const assignmentsSnapshot =
+        await db
+            .collection("activityAssignments")
+            .where(
+                "activityId",
+                "==",
+                activityId,
+            )
+            .get();
+
+    for (
+        const assignmentSnapshot
+        of assignmentsSnapshot.docs
+    ) {
+        const assignmentData =
+            assignmentSnapshot.data();
+
+        if (
+            assignmentData.status !== undefined
+            && assignmentData.status !== "assigned"
+        ) {
+            continue;
+        }
+
+        if (
+            assignmentData.targetType ===
+            "student"
+            && assignmentData.targetId ===
+            studentId
+        ) {
+            await completeActivityAssignmentHandler(
+                {
+                    assignmentId:
+                        assignmentSnapshot.id,
+                    studentId,
+                },
+                {
+                    uid:
+                        studentId,
+                },
+            );
+
+            continue;
+        }
+
+        if (
+            assignmentData.targetType ===
+            "group"
+            && typeof assignmentData.targetId ===
+            "string"
+        ) {
+            const groupMemberSnapshot =
+                await db
+                    .collection("groupMembers")
+                    .where(
+                        "groupId",
+                        "==",
+                        assignmentData.targetId,
+                    )
+                    .where(
+                        "studentId",
+                        "==",
+                        studentId,
+                    )
+                    .limit(1)
+                    .get();
+
+            if (!groupMemberSnapshot.empty) {
+                await completeActivityAssignmentHandler(
+                    {
+                        assignmentId:
+                            assignmentSnapshot.id,
+                        studentId,
+                    },
+                    {
+                        uid:
+                            studentId,
+                    },
+                );
+            }
+        }
+    }
+
+    /*
+     * =========================================
      * ACTUALIZAR PROGRESO
      * =========================================
      */
@@ -571,6 +663,10 @@ export async function submitAttemptHandler(
             score.totalQuestions,
         passed:
             score.passed,
+        xpAwarded:
+            reward.xp,
+        coinsAwarded:
+            reward.coins,
         gamification: {
             scorePercentage,
             xp:

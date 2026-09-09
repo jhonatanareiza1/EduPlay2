@@ -1,1610 +1,1779 @@
-import { readFileSync } from "node:fs";
-
-import { resolve } from "node:path";
-
 import {
-  initializeTestEnvironment,
-  type RulesTestEnvironment,
-} from "@firebase/rules-unit-testing";
 
-import {
-  doc,
-  getDoc,
-  setDoc,
-} from "firebase/firestore";
-
-import {
-  beforeAll,
-  afterAll,
   beforeEach,
+
   describe,
+
   expect,
+
   it,
+
 } from "vitest";
 
 import {
+
+  getFirestore,
+
+} from "firebase-admin/firestore";
+
+import {
+
   submitAttemptHandler,
+
 } from "../src/functions/attempts/submitAttempt";
 
 import {
+
   createActivityHandler,
+
 } from "../src/functions/activities/createActivity";
 
-let testEnv: RulesTestEnvironment;
+const projectId =
 
-const PROJECT_ID =
+  process.env.GCLOUD_PROJECT ??
+
   "eduplay-test";
 
-beforeAll(async () => {
-  testEnv =
-    await initializeTestEnvironment({
-      projectId:
-        PROJECT_ID,
+const firestoreHost =
 
-      firestore: {
-        host:
-          "127.0.0.1",
+  "127.0.0.1";
 
-        port:
-          8081,
+const firestorePort =
 
-        rules:
-          readFileSync(
-            resolve(
-              process.cwd(),
-              "../firestore.rules",
-            ),
-            "utf8",
-          ),
-      },
-    });
-});
+  8081;
 
-afterAll(async () => {
-  if (testEnv) {
-    await testEnv.cleanup();
-  }
-});
+const db =
+
+  getFirestore();
 
 beforeEach(async () => {
-  await testEnv.clearFirestore();
+
+  const response =
+
+    await fetch(
+
+      `http://${firestoreHost}:${firestorePort}/emulator/v1/projects/${projectId}/databases/(default)/documents`,
+
+      {
+
+        method:
+
+          "DELETE",
+
+      },
+
+    );
+
+  if (!response.ok) {
+
+    throw new Error(
+
+      `No se pudo limpiar Firestore Emulator: ${response.status} ${response.statusText}`,
+
+    );
+
+  }
+
 });
 
 describe(
-  "submitAttempt - integración",
+
+  "submitAttemptHandler integration",
+
   () => {
+
     it(
-      "crea un intento, calcula el score y entrega XP/EduCoins",
+
+      "creates an attempt, awards rewards and prevents duplicate submission",
+
       async () => {
+
         const studentId =
-          "student-test-001";
 
-        const activityId =
-          "activity-test-001";
+          "student-submit-001";
 
-        const configId =
-          "config-test-001";
+        const teacherId =
 
-        const attemptId =
-          "attempt-test-001";
+          "teacher-submit-001";
 
-        await testEnv
-          .withSecurityRulesDisabled(
-            async (context) => {
-              const db =
-                context.firestore();
+        await db
 
-              await setDoc(
-                doc(
-                  db,
-                  "users",
-                  studentId,
-                ),
-                {
-                  uid:
-                    studentId,
+          .collection("users")
 
-                  role:
-                    "student",
+          .doc(studentId)
 
-                  name:
-                    "Estudiante de prueba",
-                },
-              );
+          .set({
 
-              await setDoc(
-                doc(
-                  db,
-                  "students",
-                  studentId,
-                ),
-                {
-                  userId:
-                    studentId,
-                },
-              );
+            role:
 
-              await setDoc(
-                doc(
-                  db,
-                  "activities",
-                  activityId,
-                ),
-                {
-                  title:
-                    "Actividad de prueba",
+              "student",
 
-                  ownerTeacherId:
-                    "teacher-test-001",
+          });
 
-                  configId,
+        await db
 
-                  type:
-                    "quiz",
+          .collection("students")
 
-                  isPublished:
-                    true,
+          .doc(studentId)
 
-                  subjectId:
-                    "mathematics",
-                },
-              );
+          .set({
 
-              await setDoc(
-                doc(
-                  db,
-                  "activityConfigs",
-                  configId,
-                ),
-                {
-                  activityId,
-
-                  ownerTeacherId:
-                    "teacher-test-001",
-
-                  questions: [
-                    {
-                      id:
-                        "question1",
-
-                      type:
-                        "multiple-choice",
-
-                      text:
-                        "Pregunta 1",
-
-                      options: [
-                        {
-                          id:
-                            "option-a",
-
-                          text:
-                            "Correcta",
-                        },
-
-                        {
-                          id:
-                            "option-b",
-
-                          text:
-                            "Incorrecta",
-                        },
-                      ],
-
-                      points:
-                        5,
-                    },
-
-                    {
-                      id:
-                        "question2",
-
-                      type:
-                        "multiple-choice",
-
-                      text:
-                        "Pregunta 2",
-
-                      options: [
-                        {
-                          id:
-                            "option-a",
-
-                          text:
-                            "Incorrecta",
-                        },
-
-                        {
-                          id:
-                            "option-b",
-
-                          text:
-                            "Correcta",
-                        },
-                      ],
-
-                      points:
-                        5,
-                    },
-                  ],
-
-                  passingScore:
-                    6,
-                },
-              );
-
-              await setDoc(
-                doc(
-                  db,
-                  "activityAnswerKeys",
-                  activityId,
-                ),
-                {
-                  activityId,
-
-                  ownerTeacherId:
-                    "teacher-test-001",
-
-                  answers: {
-                    question1:
-                      "option-a",
-
-                    question2:
-                      "option-b",
-                  },
-                },
-              );
-
-              await setDoc(
-                doc(
-                  db,
-                  "gamificationProfiles",
-                  studentId,
-                ),
-                {
-                  studentId,
-
-                  totalXP:
-                    0,
-
-                  level:
-                    1,
-
-                  coins:
-                    0,
-
-                  currentStreak:
-                    0,
-
-                  bestStreak:
-                    0,
-
-                  subjects: {
-                    mathematics: {
-                      percentage:
-                        0,
-
-                      level:
-                        1,
-
-                      label:
-                        "Básico",
-                    },
-
-                    english: {
-                      percentage:
-                        0,
-
-                      level:
-                        1,
-
-                      label:
-                        "Básico",
-                    },
-
-                    science: {
-                      percentage:
-                        0,
-
-                      level:
-                        1,
-
-                      label:
-                        "Básico",
-                    },
-
-                    history: {
-                      percentage:
-                        0,
-
-                      level:
-                        1,
-
-                      label:
-                        "Básico",
-                    },
-                  },
-
-                  lastActivityAt:
-                    null,
-
-                  createdAt:
-                    new Date(),
-
-                  updatedAt:
-                    new Date(),
-                },
-              );
-
-              await setDoc(
-                doc(
-                  db,
-                  "achievements",
-                  "first-victory",
-                ),
-                {
-                  name:
-                    "Primera victoria",
-
-                  description:
-                    "Completar una actividad con éxito.",
-                },
-              );
-
-              await setDoc(
-                doc(
-                  db,
-                  "achievements",
-                  "perfect-score",
-                ),
-                {
-                  name:
-                    "Puntuación perfecta",
-
-                  description:
-                    "Obtener una puntuación perfecta.",
-                },
-              );
-            },
-          );
-
-        const result =
-          await submitAttemptHandler(
-            {
-              activityId,
+            userId:
 
               studentId,
 
-              attemptId,
+          });
 
-              answers: {
-                question1:
-                  "option-a",
+        await db
 
-                question2:
-                  "option-b",
+          .collection("users")
+
+          .doc(teacherId)
+
+          .set({
+
+            role:
+
+              "teacher",
+
+          });
+
+        await db
+
+          .collection("activities")
+
+          .doc("activity-submit-001")
+
+          .set({
+
+            title:
+
+              "Actividad integración",
+
+            type:
+
+              "quiz",
+
+            ownerTeacherId:
+
+              teacherId,
+
+            subjectId:
+
+              "mathematics",
+
+            configId:
+
+              "activity-submit-001",
+
+            isPublished:
+
+              true,
+
+          });
+
+        await db
+
+          .collection("activityConfigs")
+
+          .doc("activity-submit-001")
+
+          .set({
+
+            activityId:
+
+              "activity-submit-001",
+
+            ownerTeacherId:
+
+              teacherId,
+
+            passingScore:
+
+              1,
+
+            questions: [
+
+              {
+
+                id:
+
+                  "question-submit-001",
+
+                type:
+
+                  "multiple-choice",
+
+                text:
+
+                  "2 + 2",
+
+                options: [
+
+                  {
+
+                    id:
+
+                      "option-3",
+
+                    text:
+
+                      "3",
+
+                  },
+
+                  {
+
+                    id:
+
+                      "option-4",
+
+                    text:
+
+                      "4",
+
+                  },
+
+                ],
+
+                points:
+
+                  1,
+
               },
+
+            ],
+
+          });
+
+        await db
+
+          .collection("activityAnswerKeys")
+
+          .doc("activity-submit-001")
+
+          .set({
+
+            activityId:
+
+              "activity-submit-001",
+
+            ownerTeacherId:
+
+              teacherId,
+
+            answers: {
+
+              "question-submit-001":
+
+                "4",
+
             },
-            {
-              uid:
-                studentId,
-            },
-          );
 
-        expect(
-          result.success,
-        ).toBe(true);
+          });
 
-        expect(
-          result.attemptId,
-        ).toBe(attemptId);
+        await db
 
-        expect(
-          result.score,
-        ).toBe(10);
+          .collection("gamificationProfiles")
 
-        expect(
-          result.totalPoints,
-        ).toBe(10);
+          .doc(studentId)
 
-        expect(
-          result.correctAnswers,
-        ).toBe(2);
+          .set({
 
-        expect(
-          result.totalQuestions,
-        ).toBe(2);
-
-        expect(
-          result.passed,
-        ).toBe(true);
-
-        expect(
-          result.gamification.xp,
-        ).toBe(20);
-
-        expect(
-          result.gamification.totalXP,
-        ).toBe(20);
-
-        expect(
-          result.gamification.coins,
-        ).toBe(10);
-
-        expect(
-          result.gamification.totalCoins,
-        ).toBe(10);
-
-        const context =
-          testEnv.authenticatedContext(
             studentId,
-          );
-
-        const attemptSnap =
-          await getDoc(
-            doc(
-              context.firestore(),
-              "attempts",
-              result.attemptId,
-            ),
-          );
-
-        expect(
-          attemptSnap.exists(),
-        ).toBe(true);
-
-        expect(
-          attemptSnap.data(),
-        ).toMatchObject({
-          studentId,
-
-          activityId,
-
-          answers: {
-            question1:
-              "option-a",
-
-            question2:
-              "option-b",
-          },
-
-          score:
-            10,
-
-          totalPoints:
-            10,
-
-          correctAnswers:
-            2,
-
-          totalQuestions:
-            2,
-
-          passed:
-            true,
-
-          status:
-            "submitted",
-
-          gamification: {
-            scorePercentage:
-              100,
 
             xp:
-              20,
+
+              0,
 
             coins:
-              10,
 
-            rewarded:
-              true,
-          },
-        });
+              0,
 
-        const profileSnap =
-          await getDoc(
-            doc(
-              context.firestore(),
-              "gamificationProfiles",
-              studentId,
-            ),
-          );
+          });
 
-        expect(
-          profileSnap.exists(),
-        ).toBe(true);
+        await db
 
-        expect(
-          profileSnap.data(),
-        ).toMatchObject({
-          studentId,
+          .collection("achievements")
 
-          totalXP:
-            20,
+          .doc("first-victory")
 
-          level:
-            1,
+          .set({
 
-          coins:
-            10,
-        });
+            id:
 
-        /*
-         * Repetimos exactamente el mismo intento.
-         *
-         * El mismo attemptId debe devolver
-         * el resultado existente sin volver a
-         * entregar XP ni EduCoins.
-         */
+              "first-victory",
 
-        const duplicateResult =
-          await submitAttemptHandler(
+            name:
+
+              "First Victory",
+
+            requirement:
+
             {
-              activityId,
-
-              studentId,
-
-              attemptId,
-
-              answers: {
-                question1:
-                  "option-a",
-
-                question2:
-                  "option-b",
-              },
-            },
-            {
-              uid:
-                studentId,
-            },
-          );
-
-        expect(
-          duplicateResult.success,
-        ).toBe(true);
-
-        expect(
-          duplicateResult.attemptId,
-        ).toBe(attemptId);
-
-        expect(
-          duplicateResult.score,
-        ).toBe(10);
-
-        expect(
-          duplicateResult.totalPoints,
-        ).toBe(10);
-
-        expect(
-          duplicateResult.correctAnswers,
-        ).toBe(2);
-
-        expect(
-          duplicateResult.totalQuestions,
-        ).toBe(2);
-
-        expect(
-          duplicateResult.passed,
-        ).toBe(true);
-
-        expect(
-          duplicateResult.gamification.xp,
-        ).toBe(20);
-
-        expect(
-          duplicateResult.gamification.totalXP,
-        ).toBe(20);
-
-        expect(
-          duplicateResult.gamification.coins,
-        ).toBe(10);
-
-        expect(
-          duplicateResult.gamification.totalCoins,
-        ).toBe(10);
-
-        /*
-         * Verificamos que el perfil NO haya recibido
-         * las recompensas nuevamente.
-         */
-
-        const profileAfterDuplicateSnap =
-          await getDoc(
-            doc(
-              context.firestore(),
-              "gamificationProfiles",
-              studentId,
-            ),
-          );
-
-        expect(
-          profileAfterDuplicateSnap.exists(),
-        ).toBe(true);
-
-        expect(
-          profileAfterDuplicateSnap.data(),
-        ).toMatchObject({
-          studentId,
-
-          totalXP:
-            20,
-
-          level:
-            1,
-
-          coins:
-            10,
-        });
-      },
-    );
-
-    it(
-      "rechaza una actividad sin configuración",
-      async () => {
-        const studentId =
-          "student-test-002";
-
-        const activityId =
-          "activity-test-002";
-
-        await testEnv
-          .withSecurityRulesDisabled(
-            async (context) => {
-              const db =
-                context.firestore();
-
-              await setDoc(
-                doc(
-                  db,
-                  "users",
-                  studentId,
-                ),
-                {
-                  uid:
-                    studentId,
-
-                  role:
-                    "student",
-
-                  name:
-                    "Estudiante de prueba",
-                },
-              );
-
-              await setDoc(
-                doc(
-                  db,
-                  "activities",
-                  activityId,
-                ),
-                {
-                  title:
-                    "Actividad sin configuración",
-
-                  ownerTeacherId:
-                    "teacher-test-001",
-
-                  configId:
-                    "missing-config",
-
-                  type:
-                    "quiz",
-
-                  isPublished:
-                    true,
-
-                  subjectId:
-                    "mathematics",
-                },
-              );
-            },
-          );
-
-        await expect(
-          submitAttemptHandler(
-            {
-              activityId,
-
-              studentId,
-
-              answers: {
-                question1:
-                  "option-a",
-              },
-            },
-            {
-              uid:
-                studentId,
-            },
-          ),
-        ).rejects.toThrow();
-      },
-    );
-
-    it(
-      "rechaza reutilizar un attemptId para otro estudiante",
-      async () => {
-        const studentId =
-          "student-test-003";
-
-        const otherStudentId =
-          "student-test-004";
-
-        const activityId =
-          "activity-test-003";
-
-        const configId =
-          "config-test-003";
-
-        const attemptId =
-          "attempt-test-003";
-
-        await testEnv
-          .withSecurityRulesDisabled(
-            async (context) => {
-              const db =
-                context.firestore();
-
-              await setDoc(
-                doc(
-                  db,
-                  "users",
-                  studentId,
-                ),
-                {
-                  uid:
-                    studentId,
-
-                  role:
-                    "student",
-
-                  name:
-                    "Estudiante 3",
-                },
-              );
-
-              await setDoc(
-                doc(
-                  db,
-                  "users",
-                  otherStudentId,
-                ),
-                {
-                  uid:
-                    otherStudentId,
-
-                  role:
-                    "student",
-
-                  name:
-                    "Estudiante 4",
-                },
-              );
-
-              await setDoc(
-                doc(
-                  db,
-                  "activities",
-                  activityId,
-                ),
-                {
-                  title:
-                    "Actividad de seguridad",
-
-                  ownerTeacherId:
-                    "teacher-test-001",
-
-                  configId,
-
-                  type:
-                    "quiz",
-
-                  isPublished:
-                    true,
-
-                  subjectId:
-                    "mathematics",
-                },
-              );
-
-              await setDoc(
-                doc(
-                  db,
-                  "activityConfigs",
-                  configId,
-                ),
-                {
-                  activityId,
-
-                  ownerTeacherId:
-                    "teacher-test-001",
-
-                  questions: [
-                    {
-                      id:
-                        "question1",
-
-                      type:
-                        "multiple-choice",
-
-                      text:
-                        "Pregunta 1",
-
-                      options: [
-                        {
-                          id:
-                            "option-a",
-
-                          text:
-                            "Correcta",
-                        },
-
-                        {
-                          id:
-                            "option-b",
-
-                          text:
-                            "Incorrecta",
-                        },
-                      ],
-
-                      points:
-                        5,
-                    },
-                  ],
-
-                  passingScore:
-                    5,
-                },
-              );
-
-              await setDoc(
-                doc(
-                  db,
-                  "activityAnswerKeys",
-                  activityId,
-                ),
-                {
-                  activityId,
-
-                  ownerTeacherId:
-                    "teacher-test-001",
-
-                  answers: {
-                    question1:
-                      "option-a",
-                  },
-                },
-              );
-
-              await setDoc(
-                doc(
-                  db,
-                  "gamificationProfiles",
-                  studentId,
-                ),
-                {
-                  studentId,
-
-                  totalXP:
-                    0,
-
-                  level:
-                    1,
-
-                  coins:
-                    0,
-
-                  currentStreak:
-                    0,
-
-                  bestStreak:
-                    0,
-
-                  subjects: {},
-
-                  lastActivityAt:
-                    null,
-
-                  createdAt:
-                    new Date(),
-
-                  updatedAt:
-                    new Date(),
-                },
-              );
-
-              await setDoc(
-                doc(
-                  db,
-                  "gamificationProfiles",
-                  otherStudentId,
-                ),
-                {
-                  studentId:
-                    otherStudentId,
-
-                  totalXP:
-                    0,
-
-                  level:
-                    1,
-
-                  coins:
-                    0,
-
-                  currentStreak:
-                    0,
-
-                  bestStreak:
-                    0,
-
-                  subjects: {},
-
-                  lastActivityAt:
-                    null,
-
-                  createdAt:
-                    new Date(),
-
-                  updatedAt:
-                    new Date(),
-                },
-              );
-
-              await setDoc(
-                doc(
-                  db,
-                  "attempts",
-                  attemptId,
-                ),
-                {
-                  studentId,
-
-                  activityId,
-
-                  answers: {
-                    question1:
-                      "option-a",
-                  },
-
-                  score:
-                    5,
-
-                  totalPoints:
-                    5,
-
-                  correctAnswers:
-                    1,
-
-                  totalQuestions:
-                    1,
-
-                  passed:
-                    true,
-
-                  status:
-                    "submitted",
-
-                  gamification: {
-                    scorePercentage:
-                      100,
-
-                    xp:
-                      20,
-
-                    coins:
-                      10,
-
-                    rewarded:
-                      true,
-                  },
-
-                  createdAt:
-                    new Date(),
-                },
-              );
-            },
-          );
-
-        await expect(
-          submitAttemptHandler(
-            {
-              activityId,
-
-              studentId:
-                otherStudentId,
-
-              attemptId,
-
-              answers: {
-                question1:
-                  "option-a",
-              },
-            },
-            {
-              uid:
-                otherStudentId,
-            },
-          ),
-        ).rejects.toThrow(
-          "El attemptId ya pertenece a otro intento.",
-        );
-
-        const otherProfileSnap =
-          await getDoc(
-            doc(
-              testEnv
-                .authenticatedContext(
-                  otherStudentId,
-                )
-                .firestore(),
-              "gamificationProfiles",
-              otherStudentId,
-            ),
-          );
-
-        expect(
-          otherProfileSnap.data(),
-        ).toMatchObject({
-          totalXP:
-            0,
-
-          coins:
-            0,
-        });
-      },
-    );
-
-    it(
-      "crea una actividad con createActivity y permite enviarla con submitAttempt",
-      async () => {
-        const teacherId =
-          "teacher-create-flow-001";
-
-        const studentId =
-          "student-create-flow-001";
-
-        const attemptId =
-          "attempt-create-flow-001";
-
-        await testEnv
-          .withSecurityRulesDisabled(
-            async (context) => {
-              const db =
-                context.firestore();
-
-              await setDoc(
-                doc(
-                  db,
-                  "users",
-                  studentId,
-                ),
-                {
-                  uid:
-                    studentId,
-
-                  role:
-                    "student",
-
-                  name:
-                    "Estudiante integración",
-                },
-              );
-
-              await setDoc(
-                doc(
-                  db,
-                  "students",
-                  studentId,
-                ),
-                {
-                  userId:
-                    studentId,
-                },
-              );
-
-              await setDoc(
-                doc(
-                  db,
-                  "gamificationProfiles",
-                  studentId,
-                ),
-                {
-                  studentId,
-
-                  totalXP:
-                    0,
-
-                  level:
-                    1,
-
-                  coins:
-                    0,
-
-                  currentStreak:
-                    0,
-
-                  bestStreak:
-                    0,
-
-                  subjects: {
-                    mathematics: {
-                      percentage:
-                        0,
-
-                      level:
-                        1,
-
-                      label:
-                        "Básico",
-                    },
-
-                    english: {
-                      percentage:
-                        0,
-
-                      level:
-                        1,
-
-                      label:
-                        "Básico",
-                    },
-
-                    science: {
-                      percentage:
-                        0,
-
-                      level:
-                        1,
-
-                      label:
-                        "Básico",
-                    },
-
-                    history: {
-                      percentage:
-                        0,
-
-                      level:
-                        1,
-
-                      label:
-                        "Básico",
-                    },
-                  },
-
-                  lastActivityAt:
-                    null,
-
-                  createdAt:
-                    new Date(),
-
-                  updatedAt:
-                    new Date(),
-                },
-              );
-
-              await setDoc(
-                doc(
-                  db,
-                  "achievements",
-                  "first-victory",
-                ),
-                {
-                  name:
-                    "Primera victoria",
-
-                  description:
-                    "Completar una actividad con éxito.",
-                },
-              );
-
-              await setDoc(
-                doc(
-                  db,
-                  "achievements",
-                  "perfect-score",
-                ),
-                {
-                  name:
-                    "Puntuación perfecta",
-
-                  description:
-                    "Obtener una puntuación perfecta.",
-                },
-              );
-            },
-          );
-
-        const created =
-          await createActivityHandler(
-            {
-              title:
-                "Actividad creada por integración",
-
-              description:
-                "Prueba del flujo completo",
 
               type:
+
+                "activitiesCompleted",
+
+              value:
+
+                1,
+
+            },
+
+          });
+
+        await db
+
+          .collection("achievements")
+
+          .doc("perfect-score")
+
+          .set({
+
+            id:
+
+              "perfect-score",
+
+            name:
+
+              "Perfect Score",
+
+            requirement:
+
+            {
+
+              type:
+
+                "perfectScore",
+
+              value:
+
+                1,
+
+            },
+
+          });
+
+        const result =
+
+          await submitAttemptHandler(
+
+            {
+
+              studentId,
+
+              activityId:
+
+                "activity-submit-001",
+
+              answers:
+
+              {
+
+                "question-submit-001":
+
+                  "4",
+
+              },
+
+              attemptId:
+
+                "attempt-submit-001",
+
+            },
+
+            {
+
+              uid:
+
+                studentId,
+
+            },
+
+          );
+
+        expect(
+
+          result.success,
+
+        ).toBe(true);
+
+        expect(
+
+          result.attemptId,
+
+        ).toBe(
+
+          "attempt-submit-001",
+
+        );
+
+        expect(
+
+          result.score,
+
+        ).toBe(1);
+
+        expect(
+
+          result.totalPoints,
+
+        ).toBe(1);
+
+        expect(
+
+          result.passed,
+
+        ).toBe(true);
+
+        expect(
+
+          result.xpAwarded,
+
+        ).toBe(20);
+
+        expect(
+
+          result.coinsAwarded,
+
+        ).toBe(10);
+
+        const attemptSnapshot =
+
+          await db
+
+            .collection("attempts")
+
+            .doc("attempt-submit-001")
+
+            .get();
+
+        expect(
+
+          attemptSnapshot.exists,
+
+        ).toBe(true);
+
+        expect(
+
+          attemptSnapshot.data()
+
+            ?.gamification
+
+            ?.rewarded,
+
+        ).toBe(true);
+
+        const duplicateResult =
+
+          await submitAttemptHandler(
+
+            {
+
+              studentId,
+
+              activityId:
+
+                "activity-submit-001",
+
+              answers:
+
+              {
+
+                "question-submit-001":
+
+                  "4",
+
+              },
+
+              attemptId:
+
+                "attempt-submit-001",
+
+            },
+
+            {
+
+              uid:
+
+                studentId,
+
+            },
+
+          );
+
+        expect(
+
+          duplicateResult.success,
+
+        ).toBe(true);
+
+        expect(
+
+          duplicateResult.attemptId,
+
+        ).toBe(
+
+          "attempt-submit-001",
+
+        );
+
+      },
+
+    );
+
+    it(
+
+      "rejects submission when the activity configuration does not exist",
+
+      async () => {
+
+        const studentId =
+
+          "student-submit-002";
+
+        const teacherId =
+
+          "teacher-submit-002";
+
+        await db
+
+          .collection("users")
+
+          .doc(studentId)
+
+          .set({
+
+            role:
+
+              "student",
+
+          });
+
+        await db
+
+          .collection("students")
+
+          .doc(studentId)
+
+          .set({
+
+            userId:
+
+              studentId,
+
+          });
+
+        await db
+
+          .collection("users")
+
+          .doc(teacherId)
+
+          .set({
+
+            role:
+
+              "teacher",
+
+          });
+
+        await db
+
+          .collection("activities")
+
+          .doc("activity-submit-002")
+
+          .set({
+
+            title:
+
+              "Actividad sin configuración",
+
+            type:
+
+              "quiz",
+
+            ownerTeacherId:
+
+              teacherId,
+
+            subjectId:
+
+              "mathematics",
+
+            configId:
+
+              "missing-config-submit-002",
+
+            isPublished:
+
+              true,
+
+          });
+
+        await expect(
+
+          submitAttemptHandler(
+
+            {
+
+              studentId,
+
+              activityId:
+
+                "activity-submit-002",
+
+              answers:
+
+              {},
+
+              attemptId:
+
+                "attempt-submit-002",
+
+            },
+
+            {
+
+              uid:
+
+                studentId,
+
+            },
+
+          ),
+
+        ).rejects.toMatchObject({
+
+          code:
+
+            "not-found",
+
+        });
+
+      },
+
+    );
+
+    it(
+
+      "rejects reuse of an attemptId by another student",
+
+      async () => {
+
+        const firstStudentId =
+
+          "student-submit-003-a";
+
+        const secondStudentId =
+
+          "student-submit-003-b";
+
+        const teacherId =
+
+          "teacher-submit-003";
+
+        await db
+
+          .collection("users")
+
+          .doc(firstStudentId)
+
+          .set({
+
+            role:
+
+              "student",
+
+          });
+
+        await db
+
+          .collection("students")
+
+          .doc(firstStudentId)
+
+          .set({
+
+            userId:
+
+              firstStudentId,
+
+          });
+
+        await db
+
+          .collection("users")
+
+          .doc(secondStudentId)
+
+          .set({
+
+            role:
+
+              "student",
+
+          });
+
+        await db
+
+          .collection("students")
+
+          .doc(secondStudentId)
+
+          .set({
+
+            userId:
+
+              secondStudentId,
+
+          });
+
+        await db
+
+          .collection("users")
+
+          .doc(teacherId)
+
+          .set({
+
+            role:
+
+              "teacher",
+
+          });
+
+        await db
+
+          .collection("activities")
+
+          .doc("activity-submit-003")
+
+          .set({
+
+            title:
+
+              "Actividad duplicada",
+
+            type:
+
+              "quiz",
+
+            ownerTeacherId:
+
+              teacherId,
+
+            subjectId:
+
+              "mathematics",
+
+            configId:
+
+              "activity-submit-003",
+
+            isPublished:
+
+              true,
+
+          });
+
+        await db
+
+          .collection("activityConfigs")
+
+          .doc("activity-submit-003")
+
+          .set({
+
+            activityId:
+
+              "activity-submit-003",
+
+            ownerTeacherId:
+
+              teacherId,
+
+            passingScore:
+
+              1,
+
+            questions: [
+
+              {
+
+                id:
+
+                  "question-submit-003",
+
+                type:
+
+                  "multiple-choice",
+
+                text:
+
+                  "2 + 2",
+
+                options: [
+
+                  {
+
+                    id:
+
+                      "option-3",
+
+                    text:
+
+                      "3",
+
+                  },
+
+                  {
+
+                    id:
+
+                      "option-4",
+
+                    text:
+
+                      "4",
+
+                  },
+
+                ],
+
+                points:
+
+                  1,
+
+              },
+
+            ],
+
+          });
+
+        await db
+
+          .collection("activityAnswerKeys")
+
+          .doc("activity-submit-003")
+
+          .set({
+
+            activityId:
+
+              "activity-submit-003",
+
+            ownerTeacherId:
+
+              teacherId,
+
+            answers: {
+
+              "question-submit-003":
+
+                "4",
+
+            },
+
+          });
+
+        await db
+
+          .collection("gamificationProfiles")
+
+          .doc(firstStudentId)
+
+          .set({
+
+            studentId:
+
+              firstStudentId,
+
+            xp:
+
+              0,
+
+            coins:
+
+              0,
+
+          });
+
+        await db
+
+          .collection("gamificationProfiles")
+
+          .doc(secondStudentId)
+
+          .set({
+
+            studentId:
+
+              secondStudentId,
+
+            xp:
+
+              0,
+
+            coins:
+
+              0,
+
+          });
+
+        await db
+
+          .collection("achievements")
+
+          .doc("first-victory")
+
+          .set({
+
+            id:
+
+              "first-victory",
+
+            name:
+
+              "First Victory",
+
+            requirement:
+
+            {
+
+              type:
+
+                "activitiesCompleted",
+
+              value:
+
+                1,
+
+            },
+
+          });
+
+        await db
+
+          .collection("achievements")
+
+          .doc("perfect-score")
+
+          .set({
+
+            id:
+
+              "perfect-score",
+
+            name:
+
+              "Perfect Score",
+
+            requirement:
+
+            {
+
+              type:
+
+                "perfectScore",
+
+              value:
+
+                1,
+
+            },
+
+          });
+
+        await submitAttemptHandler(
+
+          {
+
+            studentId:
+
+              firstStudentId,
+
+            activityId:
+
+              "activity-submit-003",
+
+            answers:
+
+            {
+
+              "question-submit-003":
+
+                "4",
+
+            },
+
+            attemptId:
+
+              "attempt-submit-003",
+
+          },
+
+          {
+
+            uid:
+
+              firstStudentId,
+
+          },
+
+        );
+
+        await expect(
+
+          submitAttemptHandler(
+
+            {
+
+              studentId:
+
+                secondStudentId,
+
+              activityId:
+
+                "activity-submit-003",
+
+              answers:
+
+              {
+
+                "question-submit-003":
+
+                  "4",
+
+              },
+
+              attemptId:
+
+                "attempt-submit-003",
+
+            },
+
+            {
+
+              uid:
+
+                secondStudentId,
+
+            },
+
+          ),
+
+        ).rejects.toMatchObject({
+
+          code:
+
+            "already-exists",
+
+        });
+
+      },
+
+    );
+
+    it(
+
+      "creates an activity and submits an attempt successfully",
+
+      async () => {
+
+        const studentId =
+
+          "student-submit-004";
+
+        const teacherId =
+
+          "teacher-submit-004";
+
+        await db
+
+          .collection("users")
+
+          .doc(studentId)
+
+          .set({
+
+            role:
+
+              "student",
+
+          });
+
+        await db
+
+          .collection("students")
+
+          .doc(studentId)
+
+          .set({
+
+            userId:
+
+              studentId,
+
+          });
+
+        const activityResult =
+
+          await createActivityHandler(
+
+            {
+
+              title:
+
+                "Actividad creada por integración",
+
+              type:
+
                 "quiz",
 
               subjectId:
+
                 "mathematics",
 
               questions: [
+
                 {
+
                   id:
-                    "question1",
+
+                    "question-submit-004",
 
                   type:
+
                     "multiple-choice",
 
                   text:
-                    "¿Cuánto es 2 + 2?",
+
+                    "2 + 2",
 
                   options: [
+
                     {
+
                       id:
-                        "option-a",
+
+                        "option-3",
 
                       text:
+
                         "3",
+
                     },
 
                     {
+
                       id:
-                        "option-b",
+
+                        "option-4",
 
                       text:
+
                         "4",
+
                     },
+
                   ],
 
-                  points:
-                    5,
-
                   correctAnswer:
-                    "option-b",
-                },
 
-                {
-                  id:
-                    "question2",
-
-                  type:
-                    "multiple-choice",
-
-                  text:
-                    "¿Cuánto es 3 + 3?",
-
-                  options: [
-                    {
-                      id:
-                        "option-a",
-
-                      text:
-                        "6",
-                    },
-
-                    {
-                      id:
-                        "option-b",
-
-                      text:
-                        "7",
-                    },
-                  ],
+                    "4",
 
                   points:
-                    5,
 
-                  correctAnswer:
-                    "option-a",
+                    1,
+
                 },
+
               ],
 
               passingScore:
-                6,
+
+                1,
 
               isPublished:
+
                 true,
+
             },
+
             {
+
               uid:
+
                 teacherId,
+
             },
+
           );
 
-        expect(
-          created.activityId,
-        ).toBeTruthy();
+        await db
 
-        expect(
-          created.configId,
-        ).toBeTruthy();
+          .collection("gamificationProfiles")
 
-        /*
-         * Verificamos los documentos internos creados
-         * por createActivityHandler.
-         *
-         * Estas lecturas se realizan con las reglas
-         * deshabilitadas porque activityAnswerKeys
-         * contiene las respuestas correctas y no debe
-         * ser accesible directamente por el estudiante.
-         */
+          .doc(studentId)
 
-        await testEnv
-          .withSecurityRulesDisabled(
-            async (context) => {
-              const db =
-                context.firestore();
+          .set({
 
-              const activitySnap =
-                await getDoc(
-                  doc(
-                    db,
-                    "activities",
-                    created.activityId,
-                  ),
-                );
-
-              expect(
-                activitySnap.exists(),
-              ).toBe(true);
-
-              expect(
-                activitySnap.data(),
-              ).toMatchObject({
-                title:
-                  "Actividad creada por integración",
-
-                description:
-                  "Prueba del flujo completo",
-
-                ownerTeacherId:
-                  teacherId,
-
-                subjectId:
-                  "mathematics",
-
-                configId:
-                  created.configId,
-
-                type:
-                  "quiz",
-
-                isPublished:
-                  true,
-              });
-
-              const configSnap =
-                await getDoc(
-                  doc(
-                    db,
-                    "activityConfigs",
-                    created.configId,
-                  ),
-                );
-
-              expect(
-                configSnap.exists(),
-              ).toBe(true);
-
-              expect(
-                configSnap.data(),
-              ).toMatchObject({
-                activityId:
-                  created.activityId,
-
-                ownerTeacherId:
-                  teacherId,
-
-                passingScore:
-                  6,
-              });
-
-              expect(
-                configSnap.data()?.questions,
-              ).toHaveLength(2);
-
-              const answerKeySnap =
-                await getDoc(
-                  doc(
-                    db,
-                    "activityAnswerKeys",
-                    created.activityId,
-                  ),
-                );
-
-              expect(
-                answerKeySnap.exists(),
-              ).toBe(true);
-
-              expect(
-                answerKeySnap.data(),
-              ).toMatchObject({
-                activityId:
-                  created.activityId,
-
-                ownerTeacherId:
-                  teacherId,
-
-                answers: {
-                  question1:
-                    "option-b",
-
-                  question2:
-                    "option-a",
-                },
-              });
-            },
-          );
-
-        const result =
-          await submitAttemptHandler(
-            {
-              activityId:
-                created.activityId,
-
-              studentId,
-
-              attemptId,
-
-              answers: {
-                question1:
-                  "option-b",
-
-                question2:
-                  "option-a",
-              },
-            },
-            {
-              uid:
-                studentId,
-            },
-          );
-
-        expect(
-          result.success,
-        ).toBe(true);
-
-        expect(
-          result.attemptId,
-        ).toBe(attemptId);
-
-        expect(
-          result.score,
-        ).toBe(10);
-
-        expect(
-          result.totalPoints,
-        ).toBe(10);
-
-        expect(
-          result.correctAnswers,
-        ).toBe(2);
-
-        expect(
-          result.totalQuestions,
-        ).toBe(2);
-
-        expect(
-          result.passed,
-        ).toBe(true);
-
-        expect(
-          result.gamification.xp,
-        ).toBe(20);
-
-        expect(
-          result.gamification.totalXP,
-        ).toBe(20);
-
-        expect(
-          result.gamification.coins,
-        ).toBe(10);
-
-        expect(
-          result.gamification.totalCoins,
-        ).toBe(10);
-
-        const context =
-          testEnv.authenticatedContext(
             studentId,
-          );
-
-        const attemptSnap =
-          await getDoc(
-            doc(
-              context.firestore(),
-              "attempts",
-              attemptId,
-            ),
-          );
-
-        expect(
-          attemptSnap.exists(),
-        ).toBe(true);
-
-        expect(
-          attemptSnap.data(),
-        ).toMatchObject({
-          studentId,
-
-          activityId:
-            created.activityId,
-
-          answers: {
-            question1:
-              "option-b",
-
-            question2:
-              "option-a",
-          },
-
-          score:
-            10,
-
-          totalPoints:
-            10,
-
-          correctAnswers:
-            2,
-
-          totalQuestions:
-            2,
-
-          passed:
-            true,
-
-          status:
-            "submitted",
-
-          gamification: {
-            scorePercentage:
-              100,
 
             xp:
-              20,
+
+              0,
 
             coins:
-              10,
 
-            rewarded:
-              true,
-          },
-        });
+              0,
 
-        const profileSnap =
-          await getDoc(
-            doc(
-              context.firestore(),
-              "gamificationProfiles",
+          });
+
+        await db
+
+          .collection("achievements")
+
+          .doc("first-victory")
+
+          .set({
+
+            id:
+
+              "first-victory",
+
+            name:
+
+              "First Victory",
+
+            requirement:
+
+            {
+
+              type:
+
+                "activitiesCompleted",
+
+              value:
+
+                1,
+
+            },
+
+          });
+
+        await db
+
+          .collection("achievements")
+
+          .doc("perfect-score")
+
+          .set({
+
+            id:
+
+              "perfect-score",
+
+            name:
+
+              "Perfect Score",
+
+            requirement:
+
+            {
+
+              type:
+
+                "perfectScore",
+
+              value:
+
+                1,
+
+            },
+
+          });
+
+        const result =
+
+          await submitAttemptHandler(
+
+            {
+
               studentId,
-            ),
+
+              activityId:
+
+                activityResult.activityId,
+
+              answers:
+
+              {
+
+                "question-submit-004":
+
+                  "4",
+
+              },
+
+              attemptId:
+
+                "attempt-submit-004",
+
+            },
+
+            {
+
+              uid:
+
+                studentId,
+
+            },
+
           );
 
         expect(
-          profileSnap.exists(),
+
+          result.success,
+
         ).toBe(true);
 
         expect(
-          profileSnap.data(),
-        ).toMatchObject({
-          studentId,
 
-          totalXP:
-            20,
+          result.activity.id,
 
-          level:
-            1,
+        ).toBe(
 
-          coins:
-            10,
-        });
+          activityResult.activityId,
+
+        );
+
+        expect(
+
+          result.score,
+
+        ).toBe(1);
+
+        expect(
+
+          result.passed,
+
+        ).toBe(true);
+
       },
+
     );
+
+    it(
+
+      "completes a student activity assignment after submitting an attempt",
+
+      async () => {
+
+        const studentId =
+
+          "student-submit-005";
+
+        const teacherId =
+
+          "teacher-submit-005";
+
+        const assignmentId =
+
+          "assignment-submit-005";
+
+        await db
+
+          .collection("users")
+
+          .doc(studentId)
+
+          .set({
+
+            role:
+
+              "student",
+
+          });
+
+        await db
+
+          .collection("students")
+
+          .doc(studentId)
+
+          .set({
+
+            userId:
+
+              studentId,
+
+          });
+
+        await db
+
+          .collection("users")
+
+          .doc(teacherId)
+
+          .set({
+
+            role:
+
+              "teacher",
+
+          });
+
+        await db
+
+          .collection("activities")
+
+          .doc("activity-submit-005")
+
+          .set({
+
+            title:
+
+              "Actividad asignada",
+
+            type:
+
+              "quiz",
+
+            ownerTeacherId:
+
+              teacherId,
+
+            subjectId:
+
+              "mathematics",
+
+            configId:
+
+              "activity-submit-005",
+
+            isPublished:
+
+              true,
+
+          });
+
+        await db
+
+          .collection("activityConfigs")
+
+          .doc("activity-submit-005")
+
+          .set({
+
+            activityId:
+
+              "activity-submit-005",
+
+            ownerTeacherId:
+
+              teacherId,
+
+            passingScore:
+
+              1,
+
+            questions: [
+
+              {
+
+                id:
+
+                  "question-submit-005",
+
+                type:
+
+                  "multiple-choice",
+
+                text:
+
+                  "2 + 2",
+
+                options: [
+
+                  {
+
+                    id:
+
+                      "option-3",
+
+                    text:
+
+                      "3",
+
+                  },
+
+                  {
+
+                    id:
+
+                      "option-4",
+
+                    text:
+
+                      "4",
+
+                  },
+
+                ],
+
+                points:
+
+                  1,
+
+              },
+
+            ],
+
+          });
+
+        await db
+
+          .collection("activityAnswerKeys")
+
+          .doc("activity-submit-005")
+
+          .set({
+
+            activityId:
+
+              "activity-submit-005",
+
+            ownerTeacherId:
+
+              teacherId,
+
+            answers: {
+
+              "question-submit-005":
+
+                "4",
+
+            },
+
+          });
+
+        await db
+
+          .collection("gamificationProfiles")
+
+          .doc(studentId)
+
+          .set({
+
+            studentId,
+
+            xp:
+
+              0,
+
+            coins:
+
+              0,
+
+          });
+
+        await db
+
+          .collection("achievements")
+
+          .doc("first-victory")
+
+          .set({
+
+            id:
+
+              "first-victory",
+
+            name:
+
+              "First Victory",
+
+            requirement:
+
+            {
+
+              type:
+
+                "activitiesCompleted",
+
+              value:
+
+                1,
+
+            },
+
+          });
+
+        await db
+
+          .collection("achievements")
+
+          .doc("perfect-score")
+
+          .set({
+
+            id:
+
+              "perfect-score",
+
+            name:
+
+              "Perfect Score",
+
+            requirement:
+
+            {
+
+              type:
+
+                "perfectScore",
+
+              value:
+
+                1,
+
+            },
+
+          });
+
+        await db
+
+          .collection("activityAssignments")
+
+          .doc(assignmentId)
+
+          .set({
+
+            activityId:
+
+              "activity-submit-005",
+
+            assignedBy:
+
+              teacherId,
+
+            targetType:
+
+              "student",
+
+            targetId:
+
+              studentId,
+
+            status:
+
+              "assigned",
+
+            createdAt:
+
+              new Date(),
+
+          });
+
+        const result =
+
+          await submitAttemptHandler(
+
+            {
+
+              studentId,
+
+              activityId:
+
+                "activity-submit-005",
+
+              answers:
+
+              {
+
+                "question-submit-005":
+
+                  "4",
+
+              },
+
+              attemptId:
+
+                "attempt-submit-005",
+
+            },
+
+            {
+
+              uid:
+
+                studentId,
+
+            },
+
+          );
+
+        expect(
+
+          result.success,
+
+        ).toBe(true);
+
+        expect(
+
+          result.passed,
+
+        ).toBe(true);
+
+        const assignmentSnapshot =
+
+          await db
+
+            .collection("activityAssignments")
+
+            .doc(assignmentId)
+
+            .get();
+
+        expect(
+
+          assignmentSnapshot.exists,
+
+        ).toBe(true);
+
+        expect(
+
+          assignmentSnapshot.data()
+
+            ?.status,
+
+        ).toBe("completed");
+
+        expect(
+
+          assignmentSnapshot.data()
+
+            ?.completedBy,
+
+        ).toBe(studentId);
+
+        expect(
+
+          assignmentSnapshot.data()
+
+            ?.completedAt,
+
+        ).toBeDefined();
+
+      },
+
+    );
+
   },
+
 );

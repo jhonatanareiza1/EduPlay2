@@ -98,6 +98,10 @@ import {
     getTeacherActivityHandler,
 } from "./functions/activities/getTeacherActivity";
 
+import {
+    getStudentAssignmentsHandler,
+} from "./functions/assignments/getStudentAssignments";
+
 setGlobalOptions({
     maxInstances: 10,
 });
@@ -505,6 +509,26 @@ export const getTeacherActivity = onCall(
                 : null,
         ).then(
             (result) => result,
+        );
+    },
+);
+
+// ============================================================
+// ASSIGNMENTS
+// ============================================================
+
+export const getStudentAssignments = onCall(
+    {
+        cors: ["http://localhost:5173"],
+    },
+    async (request) => {
+        return getStudentAssignmentsHandler(
+            request.data,
+            request.auth
+                ? {
+                    uid: request.auth.uid,
+                }
+                : null,
         );
     },
 );

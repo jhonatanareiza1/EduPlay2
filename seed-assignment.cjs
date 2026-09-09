@@ -100,15 +100,6 @@ async function seedAssignment() {
         );
     }
 
-    await activityReference.update({
-        subjectId:
-            "subject-test-001",
-    });
-
-    console.log(
-        `subjectId agregado a activities/${activityId}.`,
-    );
-
     if (!studentSnapshot.exists) {
         const now =
             Timestamp.now();

@@ -1,4 +1,8 @@
 import {
+    HttpsError,
+} from "firebase-functions/v2/https";
+
+import {
     unlockAchievementHandler,
 } from "./unlockAchievement";
 
@@ -45,12 +49,23 @@ export async function evaluateAchievementsHandler(
     }
 
     for (const achievementId of achievements) {
-        await unlockAchievementHandler(
-            {
-                studentId: data.studentId,
-                achievementId,
-            },
-            auth,
-        );
+        try {
+            await unlockAchievementHandler(
+                {
+                    studentId: data.studentId,
+                    achievementId,
+                },
+                auth,
+            );
+        } catch (error) {
+            if (
+                error instanceof HttpsError
+                && error.code === "not-found"
+            ) {
+                continue;
+            }
+
+            throw error;
+        }
     }
 }
