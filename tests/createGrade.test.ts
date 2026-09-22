@@ -1,6 +1,13 @@
 import { readFileSync } from "node:fs";
 
-import { resolve } from "node:path";
+import {
+    dirname,
+    resolve,
+} from "node:path";
+
+import {
+    fileURLToPath,
+} from "node:url";
 
 import {
     initializeTestEnvironment,
@@ -31,6 +38,16 @@ let testEnv: RulesTestEnvironment;
 const PROJECT_ID =
     "eduplay-test";
 
+const FIRESTORE_RULES_PATH =
+    resolve(
+        dirname(
+            fileURLToPath(
+                import.meta.url,
+            ),
+        ),
+        "../../firestore.rules",
+    );
+
 beforeAll(async () => {
     testEnv =
         await initializeTestEnvironment({
@@ -43,10 +60,7 @@ beforeAll(async () => {
                     8081,
                 rules:
                     readFileSync(
-                        resolve(
-                            process.cwd(),
-                            "../firestore.rules",
-                        ),
+                        FIRESTORE_RULES_PATH,
                         "utf8",
                     ),
             },

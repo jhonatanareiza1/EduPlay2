@@ -102,6 +102,34 @@ import {
     getStudentAssignmentsHandler,
 } from "./functions/assignments/getStudentAssignments";
 
+import {
+    createActivityAssignmentHandler,
+} from "./functions/assignments/createActivityAssignment";
+
+import {
+    createFamilyHandler,
+} from "./functions/families/createFamily";
+
+import {
+    addFamilyMemberHandler,
+} from "./functions/families/addFamilyMember";
+
+import {
+    updateFamilyHandler,
+} from "./functions/families/updateFamily";
+
+import {
+    deleteFamilyHandler,
+} from "./functions/families/deleteFamily";
+
+import {
+    updateFamilyMemberHandler,
+} from "./functions/families/updateFamilyMember";
+
+import {
+    removeFamilyMemberHandler,
+} from "./functions/families/removeFamilyMember";
+
 setGlobalOptions({
     maxInstances: 10,
 });
@@ -523,6 +551,122 @@ export const getStudentAssignments = onCall(
     },
     async (request) => {
         return getStudentAssignmentsHandler(
+            request.data,
+            request.auth
+                ? {
+                    uid: request.auth.uid,
+                }
+                : null,
+        );
+    },
+);
+
+export const createActivityAssignment = onCall(
+    {
+        cors: ["http://localhost:5173"],
+    },
+    async (request) => {
+        return createActivityAssignmentHandler(
+            request.data,
+            request.auth
+                ? {
+                    uid: request.auth.uid,
+                }
+                : null,
+        );
+    },
+);
+
+// ============================================================
+// FAMILIES
+// ============================================================
+
+export const createFamily = onCall(
+    {
+        cors: ["http://localhost:5173"],
+    },
+    async (request) => {
+        return createFamilyHandler(
+            request.data,
+            request.auth
+                ? {
+                    uid: request.auth.uid,
+                }
+                : null,
+        );
+    },
+);
+
+export const addFamilyMember = onCall(
+    {
+        cors: ["http://localhost:5173"],
+    },
+    async (request) => {
+        return addFamilyMemberHandler(
+            request.data,
+            request.auth
+                ? {
+                    uid: request.auth.uid,
+                }
+                : null,
+        );
+    },
+);
+
+export const updateFamily = onCall(
+    {
+        cors: ["http://localhost:5173"],
+    },
+    async (request) => {
+        return updateFamilyHandler(
+            request.data,
+            request.auth
+                ? {
+                    uid: request.auth.uid,
+                }
+                : null,
+        );
+    },
+);
+
+export const deleteFamily = onCall(
+    {
+        cors: ["http://localhost:5173"],
+    },
+    async (request) => {
+        return deleteFamilyHandler(
+            request.data,
+            request.auth
+                ? {
+                    uid: request.auth.uid,
+                }
+                : null,
+        );
+    },
+);
+
+export const updateFamilyMember = onCall(
+    {
+        cors: ["http://localhost:5173"],
+    },
+    async (request) => {
+        return updateFamilyMemberHandler(
+            request.data,
+            request.auth
+                ? {
+                    uid: request.auth.uid,
+                }
+                : null,
+        );
+    },
+);
+
+export const removeFamilyMember = onCall(
+    {
+        cors: ["http://localhost:5173"],
+    },
+    async (request) => {
+        return removeFamilyMemberHandler(
             request.data,
             request.auth
                 ? {

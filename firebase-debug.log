@@ -1,0 +1,31 @@
+[debug] [2026-09-10T13:45:41.676Z] ----------------------------------------------------------------------
+[debug] [2026-09-10T13:45:41.678Z] Command:       C:\Program Files\nodejs\node.exe C:\Users\USER\AppData\Roaming\npm\node_modules\firebase-tools\lib\bin\firebase.js emulators:start --only functions --debug
+[debug] [2026-09-10T13:45:41.679Z] CLI Version:   15.26.0
+[debug] [2026-09-10T13:45:41.679Z] Platform:      win32
+[debug] [2026-09-10T13:45:41.679Z] Node Version:  v24.15.0
+[debug] [2026-09-10T13:45:41.679Z] Detected Agent: unknown
+[debug] [2026-09-10T13:45:41.680Z] Time:          Thu Sep 10 2026 08:45:41 GMT-0500 (hora estándar de Colombia)
+[debug] [2026-09-10T13:45:41.680Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-09-10T13:45:42.979Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-09-10T13:45:42.980Z] > authorizing via signed-in user (jhonatanareiza123@gmail.com)
+[info] i  emulators: Starting emulators: functions {"metadata":{"emulator":{"name":"hub"},"message":"Starting emulators: functions"}}
+[warn] !  ui: Port 4000 is not open on localhost (127.0.0.1,::1), could not start Emulator UI. {"metadata":{"emulator":{"name":"ui"},"message":"Port 4000 is not open on localhost (127.0.0.1,::1), could not start Emulator UI."}}
+[warn] !  ui: To select a different host/port, specify that host/port in a firebase.json config file:
+      {
+        // ...
+        "emulators": {
+          "ui": {
+            "host": "HOST",
+            "port": "PORT"
+          }
+        }
+      } {"metadata":{"emulator":{"name":"ui"},"message":"To select a different host/port, specify that host/port in a firebase.json config file:\n      {\n        // ...\n        \"emulators\": {\n          \"ui\": {\n            \"host\": \"\u001b[33mHOST\u001b[39m\",\n            \"port\": \"\u001b[33mPORT\u001b[39m\"\n          }\n        }\n      }"}}
+[warn] !  hub: emulator hub unable to start on port 4400, starting on 4401 instead. {"metadata":{"emulator":{"name":"hub"},"message":"emulator hub unable to start on port 4400, starting on 4401 instead."}}
+[warn] !  logging: Logging Emulator unable to start on port 4500, starting on 4501 instead. {"metadata":{"emulator":{"name":"logging"},"message":"Logging Emulator unable to start on port 4500, starting on 4501 instead."}}
+[debug] [2026-09-10T13:45:43.008Z] [logging] Logging Emulator only supports listening on one address (127.0.0.1). Not listening on ::1
+[debug] [2026-09-10T13:45:43.012Z] Could not find VSCode notification endpoint: TypeError: fetch failed. If you are not running the Firebase SQL Connect VSCode extension, this is expected and not an issue.
+[info] i  emulators: Shutting down emulators. {"metadata":{"emulator":{"name":"hub"},"message":"Shutting down emulators."}}
+[debug] [2026-09-10T13:45:43.015Z] Could not find VSCode notification endpoint: TypeError: fetch failed. If you are not running the Firebase SQL Connect VSCode extension, this is expected and not an issue.
+[error] 
+[error] Error: Could not start Emulator UI, port taken.

@@ -101,10 +101,80 @@ export async function acceptInvitationHandler(
 
     const acceptedAt = new Date();
 
-    await invitationRef.update({
-        status: "accepted",
-        acceptedAt,
-    });
+    if (invitation.type === "family") {
+        if (
+            typeof invitation.familyId !== "string" ||
+            invitation.familyId.trim() === ""
+        ) {
+            throw new HttpsError(
+                "invalid-argument",
+                "La invitación familiar no tiene familyId.",
+            );
+        }
+
+        const familyRef = db
+            .collection("families")
+            .doc(invitation.familyId);
+
+        const familyMemberRef = db
+            .collection("familyMembers")
+            .doc(
+                `${invitation.familyId}_${auth.uid}`,
+            );
+
+        await db.runTransaction(
+            async (transaction) => {
+                const familySnap =
+                    await transaction.get(
+                        familyRef,
+                    );
+
+                if (!familySnap.exists) {
+                    throw new HttpsError(
+                        "not-found",
+                        "La familia no existe.",
+                    );
+                }
+
+                transaction.update(
+                    invitationRef,
+                    {
+                        status:
+                            "accepted",
+                        acceptedAt,
+                    },
+                );
+
+                transaction.create(
+                    familyMemberRef,
+                    {
+                        familyId:
+                            invitation.familyId,
+
+                        userId:
+                            auth.uid,
+
+                        role:
+                            "child",
+
+                        status:
+                            "active",
+
+                        createdAt:
+                            acceptedAt,
+
+                        updatedAt:
+                            acceptedAt,
+                    },
+                );
+            },
+        );
+    } else {
+        await invitationRef.update({
+            status: "accepted",
+            acceptedAt,
+        });
+    }
 
     return {
         success: true,

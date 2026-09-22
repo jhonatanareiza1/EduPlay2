@@ -1,5 +1,13 @@
 import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+
+import {
+    dirname,
+    resolve,
+} from "node:path";
+
+import {
+    fileURLToPath,
+} from "node:url";
 
 import {
     initializeTestEnvironment,
@@ -28,20 +36,25 @@ let testEnv: RulesTestEnvironment;
 
 const PROJECT_ID = "eduplay-test";
 
+const FIRESTORE_RULES_PATH =
+    resolve(
+        dirname(
+            fileURLToPath(
+                import.meta.url,
+            ),
+        ),
+        "../../firestore.rules",
+    );
+
 beforeAll(async () => {
     testEnv =
         await initializeTestEnvironment({
             projectId: PROJECT_ID,
-
             firestore: {
                 host: "127.0.0.1",
                 port: 8081,
-
                 rules: readFileSync(
-                    resolve(
-                        process.cwd(),
-                        "../firestore.rules",
-                    ),
+                    FIRESTORE_RULES_PATH,
                     "utf8",
                 ),
             },
@@ -176,7 +189,9 @@ describe("createActivityHandler", () => {
 
     it("rechaza una pregunta sin respuesta correcta", async () => {
         const question =
-            { ...validActivity.questions[0] };
+        {
+            ...validActivity.questions[0],
+        };
 
         delete (
             question as {
@@ -280,9 +295,17 @@ describe("createActivityHandler", () => {
                 },
             );
 
-        expect(activitySnap.exists()).toBe(true);
-        expect(configSnap.exists()).toBe(true);
-        expect(answerKeySnap.exists()).toBe(true);
+        expect(
+            activitySnap.exists(),
+        ).toBe(true);
+
+        expect(
+            configSnap.exists(),
+        ).toBe(true);
+
+        expect(
+            answerKeySnap.exists(),
+        ).toBe(true);
 
         const activity =
             activitySnap.data();
